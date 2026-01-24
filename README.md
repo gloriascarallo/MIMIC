@@ -1,6 +1,11 @@
 # MIMIC: Integrating Diverse Personality Traits for Better Game Testing Using Large Language Model
 This repository is the artifact of MIMIC.
 
+The Python implementation of MIMIC, **MIMIC-Py**, is available at:
+https://github.com/Mimic-Persona/MIMIC-Py
+
+MIMIC-Py is a tool-oriented version of MIMIC designed for easy deployment across new game environments. It provides modular components and clear extension points, enabling users to adapt the framework to different games and to develop customized variants of MIMIC for experimental evaluation.
+
 In this repository, you will find the code and instructions to run MIMIC, a Large Language Model (LLM) based, personality-driven agent designed to test three different games, including [Dungeon Adventures](https://github.com/stelmaszczykadrian/Dungeon-Adventures), [Shattered Pixel Dungeon](https://shatteredpixel.com/), and [Minecraft](https://www.minecraft.net/en-us).
 
 # How to Run MIMIC
