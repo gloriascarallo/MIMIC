@@ -11,7 +11,7 @@ dependencies {
     api project(':SPD-classes')
     implementation project(':services')
     implementation 'org.json:json:20211205'
-    implementation 'org.java-websocket:Java-WebSocket:1.5.2'
+    api 'org.java-websocket:Java-WebSocket:1.5.2'
     implementation 'org.jsoup:jsoup:1.18.1'
     implementation 'org.apache.commons:commons-collections4:4.4'
     implementation 'org.jacoco:org.jacoco.core:0.8.8'

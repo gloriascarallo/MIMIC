@@ -7,11 +7,6 @@ model_list:
     litellm_params:
       model: gemini/gemini-1.5-pro-latest
       api_key: os.environ/GEMINI_API_KEY
-  - model_name: text-embedding-004
-    litellm_params:
-      model: huggingface/sentence-transformers/all-MiniLM-L6-v2
-      api_key: os.environ/HUGGINGFACE_API_KEY
-      api_base: https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2
 
 litellm_settings:
   drop_params: true

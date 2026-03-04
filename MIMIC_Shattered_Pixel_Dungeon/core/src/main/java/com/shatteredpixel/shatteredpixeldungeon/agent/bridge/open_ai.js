@@ -1,129 +1,94 @@
-const OpenAI = require("openai");
 const fetch = require("isomorphic-fetch");
 const {sendMessage} = require("./sendMessage");
 
-// OpenAI API Key:
-const config = require('../../../../../../../../../config.json');
-const OPENAI_API_KEY = config.OPENAI_API_KEY;
-
-const openai = new OpenAI({
-    apiKey: OPENAI_API_KEY,
-    baseURL: "http://localhost:4000/v1"
-});
-
-const AI_LOG_MSG = "bridge.open_ai:log";
-const AI_ERR_MSG = "bridge.open_ai:error";
+const AI_LOG_MSG = "bridge.gemini:log";
+const AI_ERR_MSG = "bridge.gemini:error";
 const EOL = "\n";
 
 /**
- * Call the OpenAI API
- * @param socket The WebSocket connection
- * @param context The context for the AI
- * @param input The input for the AI
- * @param LogMsg The log message
- * @param model gpt-3.5-turbo-instruct; gpt-3.5-turbo; gpt-4o
- * @param printInput Print the input
- * @param printContext Print the context
- * @param printAnswer Print the answer
- * @param isInJSON
- * @returns {Promise<string>} The answer from the AI
+ * Call the Google Gemini API (Ex OpenAI bridge)
  */
 async function callOpenAI(socket, context, input, LogMsg,
-                          model="gpt-4o",
+                          model="gemini-2.5-flash",
                           printInput=false, printContext=false, printAnswer=true,
                           isInJSON=true) {
-    if (!OPENAI_API_KEY) {
-        sendMessage(socket, `${AI_ERR_MSG} ERROR: CODEX_API_KEY is required.`);
-        process.exit(1);
-    }
 
-    let body;
-    let URL;
-    let answer;
+    // --- Ignora le richieste per GPT e forza sempre Gemini ---
+    model = "gemini-2.5-flash";
+
+    // Usiamo la chiave passata da terminale
+    const GOOGLE_KEY = process.env.GOOGLE_API_KEY;
+
+    if (!GOOGLE_KEY) {
+        sendMessage(socket, `${AI_ERR_MSG} ERROR: GOOGLE_API_KEY is required.`);
+        return null;
+    }
 
     if (printContext) sendMessage(socket, `${LogMsg} Context: ${context}${EOL} ${input}${EOL}`);
     if (printInput) sendMessage(socket, `${LogMsg} Input: ${input}${EOL}`);
 
     let isQualified = false;
+    let answer = "";
 
     while (!isQualified) {
-        // If is the completion GPT
-        if (model === "gpt-3.5-turbo-instruct") {
-            body = {
-                model: model,
-                prompt: `${context}${EOL} ${input}${EOL}`,
-                max_tokens: 1000,
-                temperature: 0,
-                // stop: STOP_WORD,
-                n: 1,
-            };
-            URL = "http://localhost:4000/v1/completions";
-        }
-        // If is the chat GPT
-        else {
-            body = {
-                model: model,
-                messages: [{role: "user", content: `${context}${EOL} ${input}${EOL}`}],
-                temperature: 0,
-                // stop: STOP_WORD,
-                n: 1,
-            };
-            URL = "http://localhost:4000/v1/chat/completions";
-        }
+        // Puntiamo direttamente ai server di Google
+        const URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_KEY}`;
+
+        // Il formato specifico che Gemini richiede
+        const body = {
+            contents: [{
+                parts: [{ text: `${context}${EOL}${EOL}${input}` }]
+            }],
+            generationConfig: {
+                temperature: 0 // Vogliamo decisioni logiche, non creative
+            }
+        };
 
         let response = null;
         while (response === null || response.status === 429) {
             response = await fetch(URL, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${OPENAI_API_KEY}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
             });
 
             if (!response.ok) {
-                sendMessage(socket, `${AI_ERR_MSG} api response failed with status: ${response.statusText}`);
+                sendMessage(socket, `${AI_ERR_MSG} API response failed with status: ${response.statusText}`);
 
-                if (response.status === 429 || response.status === 502 || response.status === 503) {
-                    const retryAfter = response.headers.get('Retry-After');
-                    const backoff = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000;
-
-                    sendMessage(socket, `${AI_LOG_MSG} Waiting for ${backoff / 1000} second to resend...`);
-                    await new Promise(resolve => setTimeout(resolve, backoff));
+                // Se superiamo le richieste al minuto, il bot aspetta 3 secondi e riprova da solo!
+                if (response.status === 429 || response.status >= 500) {
+                    sendMessage(socket, `${AI_LOG_MSG} Waiting 3 seconds to resend (Rate Limit)...`);
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
                 }
+                const errDetails = await response.text();
+                console.error("Dettagli Errore Google:", errDetails);
                 return null;
             }
         }
 
-        response = await response.json();
+        const data = await response.json();
 
-        sendMessage(socket, `${LogMsg} request: ${response.id}`);
-        sendMessage(socket, `${LogMsg} model: ${response.model}`);
-
-        // extract answer from response
-        if (model === "gpt-3.5-turbo-instruct") {
-            answer = await response.choices
-                .map((choice) => choice.text)
-                .join("\n");
-        } else {
-            answer = await response.choices
-                .map((choice) => choice.message.content)
-                .join("\n");
+        // Estraiamo la risposta di Gemini
+        try {
+            answer = data.candidates[0].content.parts[0].text;
+        } catch (e) {
+            sendMessage(socket, `${AI_ERR_MSG} Impossibile leggere la risposta: ${e}`);
+            return null;
         }
 
         answer = answer.trim();
         if (printAnswer) sendMessage(socket, `${LogMsg} answer: ${answer}`);
 
+        // Assicuriamoci che Gemini risponda in JSON pulito come richiede il gioco
         if (isInJSON) {
             try {
                 isQualified = true;
-                answer = answer.replace("```json", "").replace("```", "");
-                JSON.parse(answer);
+                answer = answer.replace(/```json/gi, "").replace(/```/g, "").trim();
+                JSON.parse(answer); // Testiamo se è un JSON valido
             } catch (e) {
-                sendMessage(socket, `${AI_ERR_MSG} ${e}`);
-                isQualified = false;
+                sendMessage(socket, `${AI_ERR_MSG} Formato JSON non valido, riprovo... ${e}`);
+                isQualified = false; // Se sbaglia, il ciclo while lo costringe a riprovare
             }
         } else {
             isQualified = true;

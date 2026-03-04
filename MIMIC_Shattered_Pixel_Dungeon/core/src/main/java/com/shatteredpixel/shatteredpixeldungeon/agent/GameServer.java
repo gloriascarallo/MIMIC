@@ -21,9 +21,18 @@ public class GameServer extends WebSocketServer {
         super(new InetSocketAddress(port));
     }
 
+    // Metodo statico per avviare il server comodamente da altre classi
+    public static void launch(int port) {
+        if (Dungeon.gameServer == null) {
+            Dungeon.gameServer = new GameServer(port);
+            Dungeon.gameServer.start(); // Qui 'start' funziona perché siamo dentro la classe
+            System.out.println(BOT_MSG + "Server avviato sulla porta " + port);
+        }
+    }
+
     @Override
     public void onStart() {
-
+        System.out.println(BOT_MSG + "SERVER ATTIVO E IN ASCOLTO SULLA PORTA!");
     }
 
     @Override

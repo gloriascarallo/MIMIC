@@ -24,7 +24,27 @@ async function statusToPlanInput(memoryStream, status, latestBadPlans, isBoth) {
         badPlans += JSON.stringify(latestBadPlans[bp].badPlanSummary()) + "\n";
     }
 
-    let relatedMemories = await memoryStream.retrieveMemories(JSON.stringify(status), isBoth);
+    // 1. Assicuriamoci che newStatus sia una vera stringa e puliamola dagli spazi vuoti
+    let memoryQuery = newStatus ? String(newStatus).trim() : "";
+
+    // 2. Paracadute di sicurezza per la lunghezza (tagliamo a 1000 per massima sicurezza)
+    if (memoryQuery.length > 1000) {
+        memoryQuery = memoryQuery.substring(0, 1000);
+    }
+
+    // 3. Fallback se il testo è vuoto o troppo corto, altrimenti forziamo delle parole vere
+    if (memoryQuery.length < 5 || memoryQuery === "{}") {
+        memoryQuery = "initial safe environment, no entities or special events";
+    } else {
+        // Il prefisso in inglese garantisce sempre dei token validi
+        memoryQuery = "Current game state: " + memoryQuery;
+    }
+
+    // 4. STAMPA DI DEBUG: così vediamo nel terminale cosa stiamo inviando!
+    console.log("\n>>> [DEBUG] Testo inviato all'IA per la memoria:", memoryQuery, "\n");
+
+    // 5. Interroghiamo la memoria in modo sicuro
+    let relatedMemories = await memoryStream.retrieveMemories(memoryQuery, isBoth);
 
     let pastRecentTasks = await memoryStream.retrievePastRecentMemories();
 
@@ -90,7 +110,7 @@ async function plan(socket, memoryStream, status, personality, latestBadPlans, r
 
     let currStatus = await statusToPlanInput(memoryStream, status, latestBadPlans, retrieveMethod);
 
-    let newPlan = await callOpenAI(socket, context, currStatus, BOT_LOG_MSG, "gpt-4o", false, true);
+    let newPlan = await callOpenAI(socket, context, currStatus, BOT_LOG_MSG, "gemini-2.5-flash", false, true);
 
     if (!newPlan) {
         sendMessage(socket, `${BOT_LOG_MSG} OpenAI response was empty. Ignore.`);

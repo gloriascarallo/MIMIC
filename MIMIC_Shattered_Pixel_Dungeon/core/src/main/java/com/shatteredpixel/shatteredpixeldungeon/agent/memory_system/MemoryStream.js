@@ -1,7 +1,8 @@
+require('dotenv').config();
 process.env.OPENAI_BASE_URL = "http://localhost:4000/v1";
 process.env.OPENAI_API_KEY = "llmnet";
 
-const { ChromaClient, OpenAIEmbeddingFunction } = require("chromadb");
+const { ChromaClient, OpenAIEmbeddingFunction, GoogleGenerativeAiEmbeddingFunction } = require("chromadb");
 const { listFiles, mkdir, writeFile, loadFile, loadSkills, writeJSON } = require("../utils/file_utils");
 const {preferenceAnalyze} = require("../bot_action/preferenceAnalyze");
 const {sendMessage} = require("../bridge/sendMessage");
@@ -191,12 +192,27 @@ class MemoryStream {
         this.sequenceBadPlans = [];
         this.latestBadPlans = [];
 
-        this.embedder = new OpenAIEmbeddingFunction({
-            openai_api_key: OPENAI_API_KEY,
-            openai_api_base: "http://localhost:4000/v1",
-            openai_base_url: "http://localhost:4000/v1",
-            openai_model: "text-embedding-004"
-        });
+        // Connessione DIRETTA e GRATUITA ai server di Google per la memoria
+        // Creiamo un nostro Embedder personalizzato che punta alla v1beta
+        this.embedder = {
+            generate: async (texts) => {
+                let results = [];
+                for (let text of texts) {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${process.env.GOOGLE_API_KEY}`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            model: "models/gemini-embedding-001",
+                            content: { parts: [{ text: text }] }
+                        })
+                    });
+                    const data = await res.json();
+                    if (data.error) throw new Error("Errore API Google: " + data.error.message);
+                    results.push(data.embedding.values);
+                }
+                return results;
+            }
+        };
 
         this.client = new ChromaClient({
             path: `http://localhost:${CHROMA_DB_PORT}`,
@@ -654,7 +670,7 @@ class MemoryStream {
      */
     // FIXME: Better to directly calculate using functions instead of vectorDB; tried but got different values (imprecise)
     async getPreferenceValue(id, analysis) {
-        analysis.replaceAll('\n', '');
+        if (analysis) analysis = analysis.replaceAll('\n', '');
         let m = id.toString();
 
         const relRes = await this.vectorStoreP.query({

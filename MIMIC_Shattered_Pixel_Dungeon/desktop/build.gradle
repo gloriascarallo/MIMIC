@@ -1,12 +1,32 @@
 plugins {
     id 'org.beryx.runtime' version '1.12.7'
     id 'jacoco'  // Add the JaCoCo plugin
+    id 'application'
 }
 
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 sourceCompatibility = targetCompatibility = appJavaCompatibility
 
 ext.appMainClass = "com.shatteredpixel.shatteredpixeldungeon.desktop.DesktopLauncher"
+mainClassName = appMainClass
+// Blocco per gestire i parametri da riga di comando
+// Usa questa sintassi per evitare l'errore (groovy.lang.Closure)
+// Configurazione sicura del task di avvio
+tasks.withType(JavaExec).configureEach {
+    if (name == 'run') {
+        mainClass.set("com.shatteredpixel.shatteredpixeldungeon.desktop.DesktopLauncher")
+
+        // Parametri per l'Agente/TCP
+        systemProperty "port", "8080"
+        args("--mimic", "8080")
+
+        // QUESTE RIGHE RISOLVONO IL CRASH "null" a riga 121
+        systemProperty 'Implementation-Version', appVersionCode
+        systemProperty 'Implementation-Title', appPackageName
+        systemProperty 'Specification-Title', appName
+        systemProperty 'Specification-Version', appVersionName
+    }
+}
 processResources {
     from new File(project(':core').projectDir, "/src/main/assets")
     from new File(project(':desktop').projectDir,"/src/main/assets")
@@ -14,27 +34,32 @@ processResources {
 
 def osName = System.getProperty('os.name').toLowerCase(Locale.ROOT)
 
-task debug(type: JavaExec) {
+tasks.register('debug', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath
-    ignoreExitValue = true
 
-    main = appMainClass
+    // CORREZIONE: Usa il metodo set o togli l'uguale a seconda della versione
+    setIgnoreExitValue(true)
+
+    // CORREZIONE: 'main' è deprecato, usa mainClass.set()
+    mainClass.set(appMainClass)
+
     systemProperty 'Specification-Title', appName
     systemProperty 'Implementation-Title', appPackageName
     systemProperty 'Specification-Version', appVersionName + "-INDEV"
     systemProperty 'Implementation-Version', appVersionCode
 
+    // Inseriamo anche qui la porta per sicurezza contro l'errore "null"
+    systemProperty "port", "8080"
+    args("--mimic", "8080")
+
     if (osName.contains('mac')) {
         jvmArgs '-XstartOnFirstThread'
     }
-
-    // Attach JaCoCo agent
-   // jvmArgs "-javaagent:${rootProject.projectDir}/lib/jacocoagent.jar=output=tcpserver,address=localhost,port=6300,append=true"
 }
 
-task release(type: Jar) {
+tasks.register('release', Jar) {
     //FIXME this is now needed as of gradle 7.0, due to our weird sourceSets setup. Should see if there's a better way to do this
-    setDuplicatesStrategy(DuplicatesStrategy.EXCLUDE)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from sourceSets.main.output
     dependsOn configurations.runtimeClasspath
     from { configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) } }
@@ -53,17 +78,8 @@ startScripts.dependsOn release
 jpackageImage.dependsOn release
 
 runtime {
-    modules = ['java.base',
-               'java.desktop',
-               'jdk.unsupported',
-               'jdk.crypto.cryptoki',
-               'jdk.management']
-    options = ['--strip-debug',
-               '--compress', '2',
-               '--no-header-files',
-               '--no-man-pages',
-               '--strip-native-commands',
-               '--vm', 'server']
+    modules = ['java.base', 'java.desktop', 'jdk.unsupported', 'jdk.crypto.cryptoki', 'jdk.management']
+    options = ['--strip-debug', '--compress', '2', '--no-header-files', '--no-man-pages', '--strip-native-commands', '--vm', 'server']
 
     jpackage {
         mainClass = appMainClass
@@ -76,9 +92,8 @@ runtime {
             jdkHome = jdkDownload("https://github.com/AdoptOpenJDK/openjdk16-binaries/releases/download/jdk-16.0.1%2B9/OpenJDK16U-jdk_x64_windows_hotspot_16.0.1_9.zip")
             javaHome = file("./build/jdks/win/jdk-16.0.1+9").getAbsolutePath()
             jpackage {
-                jpackageHome = file("./build/jdks/win/jdk-16.0.1+9")
-                imageOptions = ["--icon", file("./src/main/assets/icons/windows.ico"),
-                                "--java-options", "-XX:+IgnoreUnrecognizedVMOptions"]
+                jpackageHome = file("./build/jdks/win/jdk-16.0.1+9").absolutePath
+                imageOptions = ["--icon", file("./src/main/assets/icons/windows.ico"), "--java-options", "-XX:+IgnoreUnrecognizedVMOptions"] as List<String>
             }
         }
     } else if (osName.contains('linux')) {
@@ -86,9 +101,8 @@ runtime {
             jdkHome = jdkDownload("https://github.com/AdoptOpenJDK/openjdk16-binaries/releases/download/jdk-16.0.1%2B9/OpenJDK16U-jdk_x64_linux_hotspot_16.0.1_9.tar.gz")
             javaHome = file("./build/jdks/linux/jdk-16.0.1+9").getAbsolutePath()
             jpackage {
-                jpackageHome = file("./build/jdks/linux/jdk-16.0.1+9")
-                imageOptions = ["--icon", file("./src/main/assets/icons/icon_256.png"),
-                                "--java-options", "-XX:+IgnoreUnrecognizedVMOptions"]
+                jpackageHome = file("./build/jdks/linux/jdk-16.0.1+9").absolutePath
+                imageOptions = ["--icon", file("./src/main/assets/icons/icon_256.png"), "--java-options", "-XX:+IgnoreUnrecognizedVMOptions"] as List<String>
             }
         }
     } else if (osName.contains('mac')) {
@@ -96,17 +110,11 @@ runtime {
             jdkHome = jdkDownload("https://github.com/AdoptOpenJDK/openjdk16-binaries/releases/download/jdk-16.0.1%2B9/OpenJDK16U-jdk_x64_mac_hotspot_16.0.1_9.tar.gz")
             javaHome = file("./build/jdks/mac/jdk-16.0.1+9/Contents/Home/").getAbsolutePath()
             jpackage {
-                jpackageHome = file("./build/jdks/mac/jdk-16.0.1+9/Contents/Home/")
-                imageOptions = ["--icon", file("./src/main/assets/icons/mac.icns"),
-                                "--java-options", "-XstartOnFirstThread",
-                                "--java-options", "-XX:+IgnoreUnrecognizedVMOptions",
-                                //append .apple because com.shatteredpixel.shatteredpixeldungeon was taken =(
-                                "--mac-package-identifier", appPackageName + ".apple",
-                                "--mac-package-name", "ShattererdPD"]
+                jpackageHome = file("./build/jdks/mac/jdk-16.0.1+9/Contents/Home/").absolutePath
+                imageOptions = ["--icon", file("./src/main/assets/icons/mac.icns"), "--java-options", "-XstartOnFirstThread", "--java-options", "-XX:+IgnoreUnrecognizedVMOptions"] as List<String>
             }
         }
     }
-
 }
 
 dependencies {
@@ -140,11 +148,13 @@ jacocoTestReport {
     }
 
     classDirectories.setFrom(
-            fileTree(dir: "$buildDir/classes/java/main", includes: ["**/*.class"])
+            fileTree(dir: layout.buildDirectory.dir("classes/java/main"), includes: ["**/*.class"])
     )
 
     sourceDirectories.setFrom(files("src/main/java"))
-    executionData.setFrom(fileTree(dir: "$buildDir", includes: ["**/*.exec"]))
+    executionData.setFrom(
+            fileTree(dir: layout.buildDirectory, includes: ["**/*.exec"])
+    )
 }
 
 jacocoTestCoverageVerification {

@@ -1,3 +1,8 @@
+# --- SICUREZZA ---
+# Mai committare le chiavi API!
+.env
+.env.local
+
 # Compiled class file
 *.class
 
