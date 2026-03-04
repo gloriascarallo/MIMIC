@@ -29,7 +29,7 @@ task debug(type: JavaExec) {
     }
 
     // Attach JaCoCo agent
-    jvmArgs "-javaagent:${rootProject.projectDir}/lib/jacocoagent.jar=output=tcpserver,address=localhost,port=6300,append=true"
+   // jvmArgs "-javaagent:${rootProject.projectDir}/lib/jacocoagent.jar=output=tcpserver,address=localhost,port=6300,append=true"
 }
 
 task release(type: Jar) {

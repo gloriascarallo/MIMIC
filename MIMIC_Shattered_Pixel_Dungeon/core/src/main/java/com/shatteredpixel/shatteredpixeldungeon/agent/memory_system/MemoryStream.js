@@ -1,3 +1,6 @@
+process.env.OPENAI_BASE_URL = "http://localhost:4000/v1";
+process.env.OPENAI_API_KEY = "llmnet";
+
 const { ChromaClient, OpenAIEmbeddingFunction } = require("chromadb");
 const { listFiles, mkdir, writeFile, loadFile, loadSkills, writeJSON } = require("../utils/file_utils");
 const {preferenceAnalyze} = require("../bot_action/preferenceAnalyze");
@@ -67,11 +70,11 @@ class Memory{
     eventSummary(codeWanted = true){
         if (codeWanted)
             return{
-            task: this.task,
-            code: this.code,
-            previousStatus: this.previousStatus,
-            isSuccess: this.isSuccess,
-            critique: this.critique,
+                task: this.task,
+                code: this.code,
+                previousStatus: this.previousStatus,
+                isSuccess: this.isSuccess,
+                critique: this.critique,
             };
 
         return{
@@ -85,11 +88,11 @@ class Memory{
     errorSummary(codeWanted = true){
         if (codeWanted)
             return{
-            task: this.task,
-            code: this.code,
-            previousStatus: this.previousStatus,
-            errorMessage: this.errorMessage,
-            critique: this.critique,
+                task: this.task,
+                code: this.code,
+                previousStatus: this.previousStatus,
+                errorMessage: this.errorMessage,
+                critique: this.critique,
             };
 
         return{
@@ -188,7 +191,12 @@ class MemoryStream {
         this.sequenceBadPlans = [];
         this.latestBadPlans = [];
 
-        this.embedder = new OpenAIEmbeddingFunction({ openai_api_key: OPENAI_API_KEY });
+        this.embedder = new OpenAIEmbeddingFunction({
+            openai_api_key: OPENAI_API_KEY,
+            openai_api_base: "http://localhost:4000/v1",
+            openai_base_url: "http://localhost:4000/v1",
+            openai_model: "text-embedding-004"
+        });
 
         this.client = new ChromaClient({
             path: `http://localhost:${CHROMA_DB_PORT}`,

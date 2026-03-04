@@ -6,7 +6,10 @@ const {sendMessage} = require("./sendMessage");
 const config = require('../../../../../../../../../config.json');
 const OPENAI_API_KEY = config.OPENAI_API_KEY;
 
-const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
+const openai = new OpenAI({
+    apiKey: OPENAI_API_KEY,
+    baseURL: "http://localhost:4000/v1"
+});
 
 const AI_LOG_MSG = "bridge.open_ai:log";
 const AI_ERR_MSG = "bridge.open_ai:error";
@@ -54,7 +57,7 @@ async function callOpenAI(socket, context, input, LogMsg,
                 // stop: STOP_WORD,
                 n: 1,
             };
-            URL = "https://api.openai.com/v1/completions";
+            URL = "http://localhost:4000/v1/completions";
         }
         // If is the chat GPT
         else {
@@ -65,7 +68,7 @@ async function callOpenAI(socket, context, input, LogMsg,
                 // stop: STOP_WORD,
                 n: 1,
             };
-            URL = "https://api.openai.com/v1/chat/completions";
+            URL = "http://localhost:4000/v1/chat/completions";
         }
 
         let response = null;
