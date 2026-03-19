@@ -8,15 +8,11 @@ const {sendMessage} = require("./sendMessage");
 const BOT_LOG_MSG = "bridge.bottomUpActions:log";
 const BOT_ERR_MSG ="bridge.bottomUpActions:error";
 
+// Funzione per mettere in pausa il bot
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Do the bottom-up actions for the bot
- * @param socket The WebSocket connection
- * @param skillManager The skill manager
- * @param memoryStream The memory stream
- * @param PERSONALITY The personality of the bot
- * @param RETRIEVE_IS_BOTH The flag to retrieve both preferred and related memories
- * @param TIMEOUT The timeout for the code execution
- * @returns {Promise<{reason: string, task: string, subject: string, biome: string, verb: string, object: string}>}
  */
 async function bottomUpActions(socket, skillManager, memoryStream,
                                PERSONALITY, RETRIEVE_IS_BOTH,
@@ -26,21 +22,19 @@ async function bottomUpActions(socket, skillManager, memoryStream,
 
     const previousStatus = await getStatus(socket)
         .then(function(response) {
-            // Handle the server's response
             return response;
         })
-
         .catch(function(error) {
             sendMessage(socket, `${BOT_ERR_MSG} Error when fetching status: ${error}`);
         });
 
     sendMessage(socket, `${BOT_LOG_MSG} Previous Status: ${JSON.stringify(previousStatus)}`);
 
-    // Reset the decision every time
     let planDecision = false;
     let myPlan;
 
     while (!planDecision){
+        // Il rate limiter in open_ai.js gestirà automaticamente l'attesa per queste chiamate!
         myPlan = await plan(socket, memoryStream, previousStatus, PERSONALITY, memoryStream.latestBadPlans, RETRIEVE_IS_BOTH, "bottomUp");
 
         if (myPlan === null) {
@@ -58,10 +52,8 @@ async function bottomUpActions(socket, skillManager, memoryStream,
     // Send the action plan
     const feedback = await actAndFeedback(socket, myPlan)
         .then(function(response) {
-            // Handle the server's response
             return response;
         })
-
         .catch(function(error) {
             sendMessage(socket, `${BOT_ERR_MSG} Error when acting: ${error}`);
         });
@@ -73,13 +65,15 @@ async function bottomUpActions(socket, skillManager, memoryStream,
     let err_msg = feedback.errors;
     let memoryType = feedback.errors === "" ? "event" : "error";
 
-    //FIXME: not updated
+    // --- RISOLUZIONE DEL FIXME ---
+    // Aspettiamo 2 secondi PRIMA di chiedere al server il nuovo stato,
+    // in modo che il gioco abbia il tempo di ricalcolare i danni e l'inventario!
+    await sleep(2000);
+
     const newStatus = await getStatus(socket)
         .then(function(response) {
-            // Handle the server's response
             return response;
         })
-
         .catch(function(error) {
             sendMessage(socket, `${BOT_ERR_MSG} Error when fetching status: ${error}`);
         });

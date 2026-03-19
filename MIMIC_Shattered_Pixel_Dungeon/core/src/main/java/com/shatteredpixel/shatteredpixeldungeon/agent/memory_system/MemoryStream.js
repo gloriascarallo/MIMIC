@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fetch = require("isomorphic-fetch");
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 process.env.OPENAI_BASE_URL = "http://localhost:4000/v1";
 process.env.OPENAI_API_KEY = "llmnet";
 
@@ -8,6 +10,7 @@ const {preferenceAnalyze} = require("../bot_action/preferenceAnalyze");
 const {sendMessage} = require("../bridge/sendMessage");
 
 const config = require('../../../../../../../../../config.json');
+
 const OPENAI_API_KEY = config.OPENAI_API_KEY;
 const CHROMA_DB_PORT = config.CHROMA_DB_PORT;
 
@@ -209,6 +212,8 @@ class MemoryStream {
                     const data = await res.json();
                     if (data.error) throw new Error("Errore API Google: " + data.error.message);
                     results.push(data.embedding.values);
+
+                    await sleep(4500);
                 }
                 return results;
             }
