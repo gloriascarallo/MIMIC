@@ -82,7 +82,17 @@ async function runAndFeedback(socket, code) {
  * @returns {String} The prompt of the status
  */
 function status2Prompt(status, prefix="") {
+
+    if (!status) return "Nessuno stato disponibile.";
+
     let res= "";
+
+    // Questa funzione ignorerà tutte le chiavi "description" quando converte i dati in testo,
+    // salvando decine di migliaia di token per ogni passo
+    const tokenSaver = (key, value) => {
+        if (key === "description") return undefined;
+        return value;
+    };
 
     // Hero Status
     res += `${prefix}health: ${status.health}/${status.maxHealth}\n`;
@@ -91,17 +101,19 @@ function status2Prompt(status, prefix="") {
     res += `${prefix}strength: ${status.strength}\n`;
     res += `${prefix}gold: ${status.gold}\n`;
     res += `${prefix}hero position in xy: [${status.heroPositionInXY}]\n`;
-    res += `${prefix}buffs/debuffs: ${JSON.stringify(status.buffs)}\n`;
+
+    // Applichiamo il filtro tokenSaver a buff, talenti, equipaggiamento e inventario
+    res += `${prefix}buffs/debuffs: ${JSON.stringify(status.buffs, tokenSaver)}\n`;
 
     // Hero Talents
     res += `${prefix}free talent points: ${JSON.stringify(status.freeTalentPoints)}\n`;
-    res += `${prefix}talents: ${JSON.stringify(status.currTalents)}\n`;
+    res += `${prefix}talents: ${JSON.stringify(status.currTalents, tokenSaver)}\n`;
 
     // Hero Equipment
-    res += `${prefix}equipments: ${JSON.stringify(status.equipments)}\n`;
+    res += `${prefix}equipments: ${JSON.stringify(status.equipments, tokenSaver)}\n`;
 
     // Hero Inventory
-    res += `${prefix}inventory: ${JSON.stringify(status.items)}\n`;
+    res += `${prefix}inventory: ${JSON.stringify(status.items, tokenSaver)}\n`;
     res += `${prefix}keys: ${JSON.stringify(status.keys)}\n`;
 
     // Environment
