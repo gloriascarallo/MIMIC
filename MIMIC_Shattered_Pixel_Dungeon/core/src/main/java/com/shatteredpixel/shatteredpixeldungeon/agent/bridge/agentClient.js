@@ -1,7 +1,6 @@
+require('dotenv').config();
 const WebSocket = require('ws');
-const dotenv = require("dotenv");
 const config = require('../../../../../../../../../config.json');
-dotenv.config();
 
 const {MemoryStream} = require("../memory_system/MemoryStream");
 const {SkillManager} = require("../skill_library/SkillManager");
@@ -14,7 +13,6 @@ const {hybridActions} = require("./hybridActions");
 const BOT_LOG_MSG = "bridge.agentClient:log";
 const BOT_CHAT_MSG = "bridge.agentClient:chat";
 const BOT_ERR_MSG = "bridge.agentClient:error";
-
 
 // TODO: Define the constants before running the experiment
 // Take the PERSONALITY from the config.json file
@@ -52,7 +50,6 @@ const memoryStream = new MemoryStream(socket, MEMORY_ROOT_PATH, COLLECTION_NAME,
 memoryStream.init();
 
 let startTime;
-
 
 socket.onopen = function(event) {
     sendMessage(socket, `${BOT_LOG_MSG} Agent connected to WebSocket server.`);
@@ -96,11 +93,10 @@ socket.onmessage = async function (event) {
             }
         }
     }
-
+    // FIX: Sostituito resolve() che causava il crash con un console.log
     else if (msg.msgType === "feedback" || msg.msgType === "status") {
-        resolve(msg);
+        console.log(`${BOT_LOG_MSG} Ricevuto update dal gioco: ${msg.msgType}`);
     }
-
 };
 
 socket.onclose = function (event) {
