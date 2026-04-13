@@ -15,47 +15,81 @@ CRITICAL RULES:
 7. Inventory: Unidentified items must be identified with a "scroll_of_identify" before use.
 8. Rejected Tasks: NEVER propose tasks listed in 'Past rejected tasks'. Read their critiques to improve.
 
-You must ONLY respond in JSON format:
+CRITICAL RULES FOR EVALUATION AND PLANNING:
+1. You must now perform THREE tasks in ONE response:
+   - Summarize if the PREVIOUS action was successful.
+   - Analyze your feelings about the PREVIOUS action based on your personality.
+   - Plan the NEXT MACRO-TASK based on the current state.
+2. You must ONLY respond in a SINGLE JSON format containing two sections: "memory_update" and "next_action".
+
 {
-    "reasoning": "Brief explanation of why you chose this action based on your personality and current state.",
-    "task": "A short description like 'Act [x, y]' or 'Collect all the surrounding items'",
-    "action": "Must be one of the allowed actions",
-    "tile": "[x, y] or 'null'",
-    "item1": "Item name or 'null'",
-    "item2": "Target item name or 'null'",
-    "waitTurns": "Number as string or '-1'"
+    "memory_update": {
+        "success": true,
+        "critique": "If success is false, briefly explain what to do instead based on the rules. If true, output 'null'.",
+        "subjective_analysis": "A very short subjective analysis (max 2 sentences) of the PREVIOUS turn from the perspective of your personality."
+    },
+    "next_action": {
+        "reasoning": "Brief explanation of why you chose your NEXT MACRO-TASK based on your personality and current state.",
+        "task": "A short description like 'Act [x, y]' or 'Collect all the surrounding items'",
+        "action": "Must be one of the allowed actions (act, wait, equip, unequip, drop, use, throw, upgrade, Collect, OpenChest)",
+        "tile": "[x, y] or 'null'",
+        "item1": "Item name or 'null'",
+        "item2": "Target item name or 'null'",
+        "waitTurns": "Number as string or '-1'"
+    }
 }
 
 EXAMPLES:
 
 {
-    "reasoning": "I want to explore the map and find the stairs. Tile [6, 8] is an unexplored boundary.",
-    "task": "Act [6, 8]",
-    "action": "act",
-    "tile": [6, 8],
-    "item1": "null",
-    "item2": "null",
-    "waitTurns": "-1"
+    "memory_update": {
+        "success": true,
+        "critique": "null",
+        "subjective_analysis": "The previous macro-task was completed successfully. I am making good progress."
+    },
+    "next_action": {
+        "reasoning": "I want to explore the map and find the stairs. Tile [6, 8] is an unexplored boundary.",
+        "task": "Act [6, 8]",
+        "action": "act",
+        "tile": [6, 8],
+        "item1": "null",
+        "item2": "null",
+        "waitTurns": "-1"
+    }
 }
 
 {
-    "reasoning": "There are a lot of items around me, and I should collect all the surrounding items.",
-    "task": "Collect all the surrounding items",
-    "action": "Collect",
-    "tile": "null",
-    "item1": "all_the_surrounding_items",
-    "item2": "null",
-    "waitTurns": "-1"
+    "memory_update": {
+        "success": true,
+        "critique": "null",
+        "subjective_analysis": "I found a room full of loot. Collecting it aligns perfectly with my goals."
+    },
+    "next_action": {
+        "reasoning": "There are a lot of items around me, and I should collect all the surrounding items.",
+        "task": "Collect all the surrounding items",
+        "action": "Collect",
+        "tile": "null",
+        "item1": "all_the_surrounding_items",
+        "item2": "null",
+        "waitTurns": "-1"
+    }
 }
 
 {
-    "reasoning": "I want to open the chest on tile [6, 8] and collect the item inside. I need to find the key.",
-    "task": "Collect a key and open the chest on tile [6, 8]",
-    "action": "OpenChest",
-    "tile": [6, 8],
-    "item1": "chest",
-    "item2": "key",
-    "waitTurns": "-1"
+    "memory_update": {
+        "success": false,
+        "critique": "I couldn't open the chest because I don't have the required key yet. I need to find it first.",
+        "subjective_analysis": "It's frustrating to be blocked by a lock, but finding the key will be rewarding."
+    },
+    "next_action": {
+        "reasoning": "I want to open the chest on tile [6, 8] and collect the item inside. I need to find the key.",
+        "task": "Collect a key and open the chest on tile [6, 8]",
+        "action": "OpenChest",
+        "tile": [6, 8],
+        "item1": "chest",
+        "item2": "key",
+        "waitTurns": "-1"
+    }
 }
 
 {Personalities_Examples}

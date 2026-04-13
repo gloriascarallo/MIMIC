@@ -1,124 +1,111 @@
-// Imports for actions
+// [AGGIORNATO - MIMIC 2.0]
+// Rimosse dipendenze da planDecide e planDecompose.
+// La logica Top-Down ora si affida alla memoria a lungo termine per mantenere
+// la coerenza degli obiettivi macro senza frammentare l'esecuzione.
+
 const {plan} = require("../bot_action/plan");
-const {planDecide} = require("../bot_action/planDecide");
-const {summarize} = require("../bot_action/summarize");
 const {getStatus, actAndFeedback} = require("./client");
 const {sendMessage} = require("./sendMessage");
-const {planDecompose} = require("../bot_action/planDecompose");
 
 const BOT_LOG_MSG = "bridge.topDownActions:log";
 const BOT_ERR_MSG ="bridge.topDownActions:error";
 
-// Funzione per mettere in pausa il bot (serve solo per aspettare il server di gioco)
+// Funzione per mettere in pausa il bot (sincronizzazione server e rate limit API)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// --- VARIABILI GLOBALI PER LA MEMORIA TOP-DOWN ---
+let lastTopTaskDone = null;
+let lastTopFeedbackRcvd = null;
+let lastTopStatusRcvd = null;
+
 /**
- * Do the top-down actions for the bot
+ * Esegue le azioni con approccio strategico (Top-Down) usando MIMIC 2.0.
  */
 async function topDownActions(socket, skillManager, memoryStream,
                               PERSONALITY, RETRIEVE_IS_BOTH,
                               SKILL_ROOT_PATH,
                               TIMEOUT) {
 
-    memoryStream.clearLatestBadPlans(); // Clear bad plans before new run
-
+    // 1. ACQUISIZIONE STATO PRECEDENTE
     const previousStatus = await getStatus(socket)
-        .then(function(response) {
-            return response;
-        })
-        .catch(function(error) {
+        .then(response => response)
+        .catch(error => {
             sendMessage(socket, `${BOT_ERR_MSG} Error when fetching status: ${error}`);
+            return null;
         });
 
-    sendMessage(socket, `${BOT_LOG_MSG} Previous Status: ${JSON.stringify(previousStatus)}`);
+    if (!previousStatus) return null;
 
-    let planDecision = false;
-    let myPlan;
-    let subGoals = null;
+    sendMessage(socket, `${BOT_LOG_MSG} Previous Status Fetched.`);
 
-    while (!planDecision){
-        // open_ai.js gestisce le pause API
-        myPlan = await plan(socket, memoryStream, previousStatus, PERSONALITY, memoryStream.latestBadPlans, RETRIEVE_IS_BOTH, "topDown");
+    // 2. IL MEGA-PROMPT (Generazione Azione Strategica)
+    // Usiamo il mode "topDown" per istruire Gemini a mantenere una visione a lungo termine
+    const megaPlan = await plan(
+        socket, memoryStream, previousStatus, PERSONALITY,
+        [], // latestBadPlans deprecati
+        lastTopTaskDone, lastTopFeedbackRcvd,
+        RETRIEVE_IS_BOTH, "topDown"
+    );
 
-        if (myPlan === null) {
-            sendMessage(socket, `${BOT_ERR_MSG} Plan is NULL.`);
-            continue;
-        }
-
-        planDecision = await planDecide(socket, memoryStream, previousStatus, PERSONALITY, myPlan);
-        if (planDecision === null) {
-            sendMessage(socket, `${BOT_ERR_MSG} planDecision is NULL.`);
-            planDecision = false;
-        }
+    if (!megaPlan || !megaPlan.nextAction) {
+        sendMessage(socket, `${BOT_ERR_MSG} Top-Down Plan is NULL.`);
+        return null;
     }
 
-    let subPlanDecision = true;
+    const myPlan = megaPlan.nextAction;
+    const memoryUpdate = megaPlan.memoryUpdate;
 
-    // Create the subGoals until all the goals are accepted
-    planDecomposition:
-        while (subGoals === null || subGoals.length <= 0 || !subPlanDecision) {
+    // 3. AGGIORNAMENTO MEMORIA (Riflessione sul macro-obiettivo precedente)
+    if (lastTopTaskDone && memoryUpdate && lastTopStatusRcvd) {
+        let isError = (lastTopFeedbackRcvd && lastTopFeedbackRcvd.includes("Error"));
+        let memoryType = isError ? "error" : "event";
+        let errMsg = isError ? lastTopFeedbackRcvd : "";
+        let mapStatusString = JSON.stringify(lastTopStatusRcvd);
 
-            subGoals = await planDecompose(socket, previousStatus, myPlan);
-
-            if (subGoals === null) {
-                sendMessage(socket, `${BOT_ERR_MSG} subGoals is NULL.`);
-            }
-
-            // Check each sub plan
-            for (const subGoal of subGoals) {
-
-                subPlanDecision = await planDecide(socket, memoryStream, previousStatus, PERSONALITY, subGoal);
-
-                if (subPlanDecision === null) {
-                    sendMessage(socket, `${BOT_ERR_MSG} subPlanDecision is NULL.`);
-                    subPlanDecision = false;
-                }
-
-                // If any of the sub plan is not good, re-plan all
-                if (subPlanDecision === false) {
-                    continue planDecomposition;
-                }
-            }
-        }
-
-    // For each subGoal, do the same stuff as the bottom up
-    for (const subGoal of subGoals) {
-        // Send the action plan
-        const feedback = await actAndFeedback(socket, subGoal)
-            .then(function(response) {
-                return response;
-            })
-            .catch(function(error) {
-                sendMessage(socket, `${BOT_ERR_MSG} Error when acting: ${error}`);
-            });
-
-        sendMessage(socket, `${BOT_LOG_MSG} Feedback received from server: ${JSON.stringify(feedback)}`);
-
-        let bot_msg = feedback.logs;
-        let err_msg = feedback.errors;
-        let memoryType = feedback.errors === "" ? "event" : "error";
-
-        // --- RISOLUZIONE DEL PROBLEMA DI SINCRONIZZAZIONE ---
-        // Aspettiamo 2 secondi prima di fotografare il nuovo stato per far aggiornare il gioco
-        await sleep(2000);
-
-        const newStatus = await getStatus(socket)
-            .then(function(response) {
-                return response;
-            })
-            .catch(function(error) {
-                sendMessage(socket, `${BOT_ERR_MSG} Error when fetching status: ${error}`);
-            });
-
-        // Summarize the action
-        let newMemory = await summarize(socket, "", memoryStream, memoryType,
-            previousStatus, newStatus,
-            subGoal, "", "", "", bot_msg, err_msg, false);
-
-        sendMessage(socket, `${BOT_LOG_MSG} newMemory: ${JSON.stringify(newMemory)}`);
+        await memoryStream.addMemory(
+            memoryType,
+            memoryUpdate.success,
+            Date.now(),
+            0,
+            Date.now(),
+            lastTopTaskDone,
+            myPlan.action,                      // Registriamo l'azione atomica
+            JSON.stringify(myPlan.tile),        // E la destinazione
+            myPlan.item1 || "null",
+            myPlan.item2 || "null",
+            mapStatusString,
+            memoryUpdate.reasoning,             // Analisi soggettiva del successo/fallimento
+            "",
+            "",
+            "",
+            "",
+            memoryUpdate.critique || "",
+            errMsg
+        );
+        sendMessage(socket, `${BOT_LOG_MSG} Top-Down Memory Saved properly for macro-task: ${lastTopTaskDone}`);
     }
 
-    return subGoals;
+    // 4. ESECUZIONE DELL'AZIONE ATOMICA
+    // Nota: Non decomponiamo più. Eseguiamo un passo alla volta verso il macro-obiettivo.
+    const feedback = await actAndFeedback(socket, myPlan)
+        .then(response => response)
+        .catch(error => {
+            sendMessage(socket, `${BOT_ERR_MSG} Error when acting: ${error}`);
+            return { logs: "", errors: "Error occurred" };
+        });
+
+    sendMessage(socket, `${BOT_LOG_MSG} Feedback received: ${JSON.stringify(feedback)}`);
+
+    // 5. PREPARAZIONE PER IL PROSSIMO TURNO STRATEGICO
+    lastTopTaskDone = myPlan.task;
+    lastTopFeedbackRcvd = (feedback.errors && feedback.errors !== "") ? feedback.errors : feedback.logs;
+    lastTopStatusRcvd = previousStatus;
+
+    // Pausa di sicurezza
+    await sleep(2000);
+
+    // Ritorniamo un array con la singola azione per mantenere compatibilità con eventuali loop esterni
+    return [myPlan];
 }
 
 module.exports = {

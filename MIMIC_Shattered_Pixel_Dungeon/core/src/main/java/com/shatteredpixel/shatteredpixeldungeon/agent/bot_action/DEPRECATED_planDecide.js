@@ -1,7 +1,13 @@
+// [DEPRECATO]
+// Questo modulo (DEPRECATED_planDecide.js) è obsoleto.
+// Le euristiche di controllo (conteggio tentativi, analisi sintattica)
+// sono ora gestite dall'intelligenza del modello tramite l'analisi del
+// feedback e della memoria a breve termine in plan.js.
+
 const {status2Prompt} = require("../bridge/client");
 const {sendMessage} = require("../bridge/sendMessage");
 
-const BOT_LOG_MSG = "bot_action.planDecide:log";
+const BOT_LOG_MSG = "bot_action.DEPRECATED_planDecide:log";
 
 /**
  *  Decide the plan based on some basic rules:
@@ -56,12 +62,12 @@ function decideWithRule(memoryStream, status, personality, plan){
     }
 }
 
-async function planDecide(socket, memoryStream, status, personality, plan) {
+async function DEPRECATED_planDecide(socket, memoryStream, status, personality, plan) {
 
     let currStatus = status2Prompt(status);
 
     // If current plan is rejected, add current plan as a bad plan memory
-    // First planDecide with basic rules
+    // First DEPRECATED_planDecide with basic rules
     let ruleDecision = decideWithRule(memoryStream, status, personality, plan);
 
     if (ruleDecision.decision === false){
@@ -83,5 +89,5 @@ async function planDecide(socket, memoryStream, status, personality, plan) {
 
 module.exports = {
     decideWithRule,
-    planDecide,
+    planDecide: DEPRECATED_planDecide,
 };

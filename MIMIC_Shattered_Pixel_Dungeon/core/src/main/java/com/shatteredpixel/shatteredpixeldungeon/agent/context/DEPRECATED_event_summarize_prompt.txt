@@ -1,3 +1,7 @@
+[DEPRECATO]
+Questo file non è più utilizzato. La logica di valutazione del successo è stata assorbita dal sistema integrato MIMIC 2.0 in plan.js.
+Conservato solo per riferimento storico.
+
 You are an AI assistant evaluating a player's progress in 'Shattered Pixel Dungeon'.
 Evaluate if the player successfully accomplished their Task based on the Log Message.
 

@@ -1,3 +1,8 @@
+[DEPRECATO]
+Questo file non è più utilizzato. La decomposizione dei task in array è stata abbandonata in favore di un sistema decisionale reattivo a turno singolo (MIMIC 2.0).
+La coerenza degli obiettivi a lungo termine è ora garantita dalla memoria interna del modello in plan.js.
+Conservato solo per riferimento storico.
+
 You are an expert AI assistant that decomposes tasks for a player in 'Shattered Pixel Dungeon' (1 action = 1 turn).
 I will provide your stats, inventory, environment, and a final Task.
 Decompose the Task into a chronological JavaScript array of JSON subgoals.

@@ -36,29 +36,39 @@ async function callOpenAI(socket, context, input, LogMsg,
     let answer = "";
 
     try {
+
         while (!isQualified) {
-            const URL = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_KEY}`;
+            // Puntiamo al proxy LiteLLM locale invece che direttamente a Google
+            const URL = `http://localhost:4000/v1/chat/completions`;
+
             const body = {
-                contents: [{ parts: [{ text: `${context}${EOL}${EOL}${input}` }] }],
-                generationConfig: { temperature: 0 }
+                model: model, // Qui passeremo "gpt-4o" dal file plan.js
+                messages: [
+                    { role: "system", content: context },
+                    { role: "user", content: input }
+                ],
+                temperature: 0
             };
 
             let data = null;
             let currentWaitTime = 15000;
             const maxRetries = 7;
 
-            // --- LOOP RETRY CON BACKOFF ESPONENZIALE ---
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 const response = await fetch(URL, {
                     method: "POST",
-                    headers: {"Content-Type": "application/json"},
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer llmnet`
+                    },
                     body: JSON.stringify(body),
                 });
 
                 if (!response.ok) {
-                    console.error(`\n>>> [ERRORE GOOGLE]: ${response.status} - ${response.statusText}`);
+                    console.error(`\n>>> [ERRORE PROXY]: ${response.status} - ${response.statusText}`);
+                    // Se LiteLLM o Google sono sovraccarichi, facciamo il retry
                     if (response.status === 429 || response.status >= 500) {
-                        sendMessage(socket, `${AI_LOG_MSG} Google Busy. Tentativo ${attempt}/${maxRetries}. Aspetto ${currentWaitTime / 1000}s...`);
+                        sendMessage(socket, `${AI_LOG_MSG} Proxy/Google occupato. Tentativo ${attempt}/${maxRetries}...`);
                         await sleep(currentWaitTime);
                         currentWaitTime *= 2;
                         continue;
@@ -71,10 +81,11 @@ async function callOpenAI(socket, context, input, LogMsg,
 
             if (!data) return null;
 
+            // LiteLLM restituisce il formato standard OpenAI
             try {
-                answer = data.candidates[0].content.parts[0].text.trim();
+                answer = data.choices[0].message.content.trim();
             } catch (e) {
-                sendMessage(socket, `${AI_ERR_MSG} Risposta vuota da Google.`);
+                sendMessage(socket, `${AI_ERR_MSG} Formato risposta inaspettato dal proxy.`);
                 return null;
             }
 
@@ -103,7 +114,7 @@ async function callOpenAI(socket, context, input, LogMsg,
         }
 
         // --- COOLDOWN RPM (15 RICHIESTE AL MINUTO) ---
-        await sleep(20000);
+        await sleep(30000);
         return answer;
 
     } finally {

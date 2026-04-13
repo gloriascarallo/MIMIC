@@ -1,4 +1,10 @@
-const BOT_LOG_MSG = "bot_action.codeDecide:log";
+// [DEPRECATO]
+// Questo modulo (code_decide.js) è obsoleto.
+// La logica di validazione delle decisioni è stata sostituita dal feedback a ciclo chiuso
+// integrato in plan.js. Il modello ora corregge autonomamente le proprie azioni
+// analizzando i risultati dei turni precedenti.
+
+const BOT_LOG_MSG = "bot_action.DEPRECATED_codeDecide:log";
 
 const fs= require("fs");
 const callOpenAI = require("../bridge/open_ai");
@@ -57,10 +63,10 @@ function addRelatedMemory(memoryStream, context, plan){
  * @param mcData
  * @returns {Promise<boolean>}
  */
-async function codeDecide(memoryStream,
-                          status, inventory, personality,
-                          plan, code, skillsProvided,
-                          mcData) {
+async function DEPRECATED_codeDecide(memoryStream,
+                                     status, inventory, personality,
+                                     plan, code, skillsProvided,
+                                     mcData) {
 
     const persaContext = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/personalities/" + personality + ".txt", 'utf8');
     const persaExampleContext = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/personalities/" + personality + "_examples" + ".txt", 'utf8');
@@ -117,5 +123,5 @@ async function codeDecide(memoryStream,
 }
 
 module.exports = {
-    codeDecide,
+    codeDecide: DEPRECATED_codeDecide,
 };

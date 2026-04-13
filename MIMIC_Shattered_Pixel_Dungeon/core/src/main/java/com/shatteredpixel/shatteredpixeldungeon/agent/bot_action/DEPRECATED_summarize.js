@@ -1,4 +1,9 @@
-const BOT_LOG_MSG = "bot_action.summarize:log";
+// [DEPRECATO]
+// Questo modulo (DEPRECATED_summarize.js) è obsoleto.
+// La logica di analisi degli eventi e degli errori è stata integrata direttamente
+// nel ciclo di pianificazione principale in plan.js (MIMIC 2.0).
+
+const BOT_LOG_MSG = "bot_action.DEPRECATED_summarize:log";
 
 const fs = require("fs");
 const callOpenAI = require("../bridge/open_ai");
@@ -46,7 +51,7 @@ async function doEventSummary(socket, memoryStream, memoryType,
                               plan, expectation, decision, code,
                               logMsg) {
 
-    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/event_summarize_prompt.txt", 'utf8');
+    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/DEPRECATED_event_summarize_prompt.txt", 'utf8');
 
     let statusInput = getEventStatusInput(previousStatusInput, newStatusInput, plan.task, plan.reasoning, expectation, logMsg);
 
@@ -108,7 +113,7 @@ async function doErrorSummary(socket, memoryStream, memoryType,
                               previousErrorStatusInput, newErrorStatusInput,
                               plan, decision, code, logMsg, errorMsg) {
 
-    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/error_summarize_prompt.txt", 'utf8');
+    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/DEPRECATED_error_summarize_prompt.txt", 'utf8');
 
     let statusInput = getErrorStatusInput(newErrorStatusInput, plan.task, plan.reasoning, logMsg, errorMsg);
 
@@ -151,9 +156,9 @@ async function doErrorSummary(socket, memoryStream, memoryType,
  * @param isTimeOut If the code is timeout
  * @returns {Promise<Memory|null>}
  */
-async function summarize(socket, basic_skills, memoryStream, memoryType,
-                         previousStatus, newStatus,
-                         plan, expectation, decision, code, logMsg, errorMsg, isTimeOut) {
+async function DEPRECATED_summarize(socket, basic_skills, memoryStream, memoryType,
+                                    previousStatus, newStatus,
+                                    plan, expectation, decision, code, logMsg, errorMsg, isTimeOut) {
 
     if (memoryType === "event") {
         const previousEventStatusInput = status2Prompt(previousStatus, "previous ");
@@ -174,5 +179,5 @@ async function summarize(socket, basic_skills, memoryStream, memoryType,
 }
 
 module.exports = {
-    summarize,
+    summarize: DEPRECATED_summarize,
 };

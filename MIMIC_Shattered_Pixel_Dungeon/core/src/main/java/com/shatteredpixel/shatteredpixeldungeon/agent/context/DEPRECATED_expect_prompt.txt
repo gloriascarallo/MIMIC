@@ -1,3 +1,7 @@
+[DEPRECATO]
+Questo file non è più utilizzato. La logica di predizione delle aspettative è stata rimossa per ottimizzare le chiamate API, in quanto il ragionamento sulle conseguenze è ora parte della fase di pianificazione integrata in plan.js.
+Conservato solo per riferimento storico.
+
 You are an expert AI in 'Shattered Pixel Dungeon'.
 Predict the expected inventory, equipment, or stat changes after executing a specific Task.
 

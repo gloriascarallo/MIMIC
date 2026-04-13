@@ -1,91 +1,112 @@
-// Imports for actions
+// [AGGIORNATO - MIMIC 2.0]
+// Rimosse dipendenze da summarize, planDecide e planDecompose.
+
 const {plan} = require("../bot_action/plan");
-const {planDecide} = require("../bot_action/planDecide");
-const {summarize} = require("../bot_action/summarize");
 const {getStatus, actAndFeedback} = require("./client");
 const {sendMessage} = require("./sendMessage");
 
 const BOT_LOG_MSG = "bridge.bottomUpActions:log";
 const BOT_ERR_MSG ="bridge.bottomUpActions:error";
 
-// Funzione per mettere in pausa il bot
+// Funzione per mettere in pausa il bot per stabilità API e sincronizzazione server
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// --- VARIABILI GLOBALI PER LA MEMORIA A BREVE TERMINE ---
+let lastTaskDone = null;
+let lastFeedbackRcvd = null;
+let lastStatusRcvd = null;
+
 /**
- * Do the bottom-up actions for the bot
+ * Esegue le azioni bottom-up del bot usando l'architettura MIMIC 2.0.
+ * Valuta il turno precedente e pianifica il prossimo in un'unica chiamata.
  */
 async function bottomUpActions(socket, skillManager, memoryStream,
                                PERSONALITY, RETRIEVE_IS_BOTH,
                                TIMEOUT) {
 
-    memoryStream.clearLatestBadPlans(); // Clear bad plans before new run
-
-    const previousStatus = await getStatus(socket)
-        .then(function(response) {
-            return response;
-        })
-        .catch(function(error) {
-            sendMessage(socket, `${BOT_ERR_MSG} Error when fetching status: ${error}`);
+    // 1. RECUPERO DELLO STATO CORRENTE
+    const currentStatus = await getStatus(socket)
+        .then(response => response)
+        .catch(error => {
+            sendMessage(socket, `${BOT_ERR_MSG} Errore nel fetching status: ${error}`);
+            return null;
         });
 
-    sendMessage(socket, `${BOT_LOG_MSG} Previous Status: ${JSON.stringify(previousStatus)}`);
+    if (!currentStatus) return null;
 
-    let planDecision = false;
-    let myPlan;
+    sendMessage(socket, `${BOT_LOG_MSG} Stato corrente acquisito.`);
 
-    while (!planDecision){
-        // Il rate limiter in open_ai.js gestirà automaticamente l'attesa per queste chiamate!
-        myPlan = await plan(socket, memoryStream, previousStatus, PERSONALITY, memoryStream.latestBadPlans, RETRIEVE_IS_BOTH, "bottomUp");
+    // 2. IL MEGA-PROMPT (Architettura Single-Shot)
+    // Passiamo il risultato del turno precedente direttamente a Gemini.
+    // Non serve più il ciclo while perché l'IA si autocorregge leggendo lastFeedbackRcvd.
+    const megaPlan = await plan(
+        socket, memoryStream, currentStatus, PERSONALITY,
+        [], // latestBadPlans svuotato: la memoria ora è gestita tramite feedback
+        lastTaskDone, lastFeedbackRcvd,
+        RETRIEVE_IS_BOTH, "bottomUp"
+    );
 
-        if (myPlan === null) {
-            sendMessage(socket, `${BOT_ERR_MSG} Plan is NULL.`);
-            continue;
-        }
-
-        planDecision = await planDecide(socket, memoryStream, previousStatus, PERSONALITY, myPlan);
-        if (planDecision === null) {
-            sendMessage(socket, `${BOT_ERR_MSG} planDecision is NULL.`);
-            planDecision = false;
-        }
+    if (!megaPlan || !megaPlan.nextAction) {
+        sendMessage(socket, `${BOT_ERR_MSG} Il Piano generato è NULL o non valido.`);
+        return null;
     }
 
-    // Send the action plan
-    const feedback = await actAndFeedback(socket, myPlan)
-        .then(function(response) {
-            return response;
-        })
-        .catch(function(error) {
-            sendMessage(socket, `${BOT_ERR_MSG} Error when acting: ${error}`);
+    const nextAction = megaPlan.nextAction;
+    const memoryUpdate = megaPlan.memoryUpdate;
+
+    // 3. AGGIORNAMENTO MEMORIA SOGGETTIVA E VETTORIALE
+    // Analizziamo cosa è successo nel turno precedente prima di procedere.
+    if (lastTaskDone && memoryUpdate && lastStatusRcvd) {
+
+        const isError = lastFeedbackRcvd && lastFeedbackRcvd.includes("Error");
+        const memoryType = isError ? "error" : "event";
+        const errMsg = isError ? lastFeedbackRcvd : "";
+        const mapStatusString = JSON.stringify(lastStatusRcvd);
+
+        await memoryStream.addMemory(
+            memoryType,                         // event o error
+            memoryUpdate.success,               // Boolean dal Mega-Prompt
+            Date.now(),                         // timeCreated
+            0,                                  // timeExpired
+            Date.now(),                         // lastAccessed
+            lastTaskDone,                       // Il task appena concluso
+            nextAction.action,                  // L'azione tecnica scelta
+            JSON.stringify(nextAction.tile),    // Il tile target
+            nextAction.item1 || "null",
+            nextAction.item2 || "null",
+            mapStatusString,                    // Stato precedente (cruciale per Embedding)
+            memoryUpdate.reasoning,             // Ragionamento soggettivo del bot
+            "",                                 // decideReason (deprecato)
+            "",                                 // summarizeReason (deprecato)
+            "",                                 // code (deprecato)
+            "",                                 // skills
+            memoryUpdate.critique || "",        // Critica costruttiva se ha fallito
+            errMsg                              // Messaggio di errore tecnico
+        );
+
+        sendMessage(socket, `${BOT_LOG_MSG} Memoria salvata correttamente per: ${lastTaskDone}`);
+    }
+
+    // 4. ESECUZIONE DELL'AZIONE SUL SERVER DI GIOCO
+    const feedback = await actAndFeedback(socket, nextAction)
+        .then(response => response)
+        .catch(error => {
+            sendMessage(socket, `${BOT_ERR_MSG} Errore durante l'azione: ${error}`);
+            return { logs: "", errors: "Errore di connessione durante l'azione" };
         });
 
-    sendMessage(socket, `${BOT_LOG_MSG} Feedback received from server: ${JSON.stringify(feedback)}`);
+    sendMessage(socket, `${BOT_LOG_MSG} Feedback ricevuto: ${JSON.stringify(feedback)}`);
 
-    // Handle the feedback
-    let bot_msg = feedback.logs;
-    let err_msg = feedback.errors;
-    let memoryType = feedback.errors === "" ? "event" : "error";
+    // 5. SALVATAGGIO STATO PER IL PROSSIMO TURNO
+    // Queste variabili verranno passate al Mega-Prompt nel prossimo ciclo.
+    lastTaskDone = nextAction.task;
+    lastFeedbackRcvd = (feedback.errors && feedback.errors !== "") ? feedback.errors : feedback.logs;
+    lastStatusRcvd = currentStatus;
 
-    // --- RISOLUZIONE DEL FIXME ---
-    // Aspettiamo 2 secondi PRIMA di chiedere al server il nuovo stato,
-    // in modo che il gioco abbia il tempo di ricalcolare i danni e l'inventario!
+    // Pausa di sicurezza: evita il flooding del server e rispetta i rate limit di Gemini
     await sleep(2000);
 
-    const newStatus = await getStatus(socket)
-        .then(function(response) {
-            return response;
-        })
-        .catch(function(error) {
-            sendMessage(socket, `${BOT_ERR_MSG} Error when fetching status: ${error}`);
-        });
-
-    // Summarize the action
-    let newMemory = await summarize(socket, "", memoryStream, memoryType,
-        previousStatus, newStatus,
-        myPlan, "", "", "", bot_msg, err_msg, false);
-
-    sendMessage(socket, `${BOT_LOG_MSG} newMemory: ${JSON.stringify(newMemory)}`);
-
-    return myPlan;
+    return nextAction;
 }
 
 module.exports = {

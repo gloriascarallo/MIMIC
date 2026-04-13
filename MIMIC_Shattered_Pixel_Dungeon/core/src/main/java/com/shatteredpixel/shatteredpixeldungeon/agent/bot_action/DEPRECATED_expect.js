@@ -1,7 +1,12 @@
+// [DEPRECATO]
+// Questo modulo (DEPRECATED_expect.js) è obsoleto.
+// Le aspettative sulle conseguenze delle azioni sono ora parte del processo
+// decisionale integrato in plan.js.
+
 const fs = require("fs");
 const callOpenAI = require("../bridge/open_ai");
 
-const BOT_LOG_MSG = "bot_action.expect:log";
+const BOT_LOG_MSG = "bot_action.DEPRECATED_expect:log";
 
 /**
  *
@@ -9,9 +14,9 @@ const BOT_LOG_MSG = "bot_action.expect:log";
  * @param task The current task from the Planner
  * @returns {Promise<{item: (string|*), quantity: (number|*), reasoning: (string|*)}>}
  */
-async function expect(socket, task) {
+async function DEPRECATED_expect(socket, task) {
 
-    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/expect_prompt.txt", 'utf8');
+    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/DEPRECATED_expect_prompt.txt", 'utf8');
 
     let expectation = await callOpenAI(socket, context, "Task: " + task, BOT_LOG_MSG, "gpt-4o", false, true);
 
@@ -29,5 +34,5 @@ async function expect(socket, task) {
 }
 
 module.exports = {
-    expect,
+    expect: DEPRECATED_expect,
 };

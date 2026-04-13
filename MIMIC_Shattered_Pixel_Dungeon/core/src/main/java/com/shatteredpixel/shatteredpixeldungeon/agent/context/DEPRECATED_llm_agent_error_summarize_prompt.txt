@@ -1,3 +1,7 @@
+[DEPRECATO]
+Questo file non è più utilizzato. La valutazione degli errori e la generazione della critica sono state integrate direttamente nel processo di pianificazione di plan.js.
+Conservato solo per riferimento storico.
+
 You are an expert AI assistant evaluating a player's action in 'Shattered Pixel Dungeon'.
 Your goal is to assess if the attempted Task failed based on the Error Message, and provide actionable critique.
 

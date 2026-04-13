@@ -1,4 +1,4 @@
-const {decideWithRule} = require("../bot_action/planDecide");
+const {decideWithRule} = require("../bot_action/DEPRECATED_planDecide");
 const {MemoryStream} = require("../memory_system/MemoryStream");
 const {Skill, SkillManager} = require("../skill_library/SkillManager");
 const {mkdir} = require("../utils/file_utils");
@@ -11,8 +11,8 @@ const config = require('../../../../../../../../../config.json');
 const OPENAI_API_KEY = config.OPENAI_API_KEY;
 
 const { ChromaClient, OpenAIEmbeddingFunction} = require("chromadb");
-const {codeDescription} = require("../bot_action/skillDescription");
-const {planDecompose} = require("../bot_action/planDecompose");
+const {codeDescription} = require("../bot_action/DEPRECATED_skillDescription");
+const {planDecompose} = require("../bot_action/DEPRECATED_planDecompose");
 
 async function skill_test(){
     const skillManager = new SkillManager("./skill_library/skill_test/", "test", "aggressive", true);

@@ -96,7 +96,7 @@ function getEventStatusInput(task, logMsg) {
  */
 async function doEventSummary(socket, memoryType, plan, logMsg) {
 
-    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/llm_agent_event_summarize_prompt.txt", 'utf8');
+    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/DEPRECATED_llm_agent_event_summarize_prompt.txt", 'utf8');
 
     let statusInput = getEventStatusInput(plan.task, logMsg);
 
@@ -153,7 +153,7 @@ async function doErrorSummary(socket, memoryType,
                               newErrorStatusInput, plan,
                               logMsg, errorMsg) {
 
-    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/llm_agent_error_summarize_prompt.txt", 'utf8');
+    let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/DEPRECATED_llm_agent_error_summarize_prompt.txt", 'utf8');
 
     let statusInput = getErrorStatusInput(newErrorStatusInput, plan.task, logMsg, errorMsg);
 

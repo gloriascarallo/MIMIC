@@ -1,3 +1,8 @@
+[DEPRECATO]
+Questo file non è più utilizzato dal sistema MIMIC 2.0.
+La logica di valutazione e pianificazione è stata unificata nei nuovi prompt dinamici (_U.txt e _RP.txt) gestiti da plan.js.
+Conservato solo per riferimento storico.
+
 You are an expert AI assistant that assesses the progress of a player in the RPG turn-based game 'Shattered Pixel Dungeon'.
 Your goal is to evaluate if the player's last action failed based on the provided error message, and provide a constructive critique to help them improve.
 

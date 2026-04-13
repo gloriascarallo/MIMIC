@@ -1,9 +1,12 @@
+// [AGGIORNATO - MIMIC 2.0]
+// Questo modulo gestisce lo switch tra pianificazione reattiva (Bottom-Up)
+// e strategica (Top-Down). Ottimizzato per gestire gli oggetti azione invece delle stringhe.
+
 const {bottomUpActions} = require("./bottomUpActions");
 const {topDownActions} = require("./topDownActions");
 
-
 /**
- * Do the hybrid actions for the bot
+ * Gestisce la logica ibrida del bot.
  */
 async function hybridActions(socket, skillManager, memoryStream,
                              PERSONALITY,
@@ -14,39 +17,53 @@ async function hybridActions(socket, skillManager, memoryStream,
 
     let changed = false;
 
-    // Switch to top down if having enough skills
+    // 1. LOGICA DI SWITCH BASATA SULL'ESPERIENZA (S)
+    // Se abbiamo accumulato abbastanza memoria, passiamo alla modalità strategica
     if (isBottomUp && (switchCondition === "S" || switchCondition === "H") &&
         (memoryStream.memoryCount >= thresholdS && memoryStream.memoryCount < thresholdS + 10)) {
         isBottomUp = false;
         changed = true;
     }
 
+    // 2. ESECUZIONE AZIONE
     if (isBottomUp) {
+        // Esegue una singola azione reattiva
+        let newActionObj = await bottomUpActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, TIMEOUT);
 
-        let newTask = await bottomUpActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, TIMEOUT);
-
-        cnt += 1;
-        // if task is new, reset the counter
-        if (!memoryStream.hasTask(newTask)) {
-            cnt = 0;
+        if (newActionObj && newActionObj.task) {
+            // Se il task è nuovo, resettiamo il contatore di ripetizione
+            if (!memoryStream.hasTask(newActionObj.task)) {
+                cnt = 0;
+            } else {
+                cnt += 1;
+            }
         }
 
     } else {
-        // topDownActions ha già i suoi sleep interni ora, quindi qui non serve aggiungerne altri
+        // Esegue l'azione strategica (ora restituisce un array di una singola azione in MIMIC 2.0)
         let subTasks = await topDownActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, SKILL_ROOT_PATH, TIMEOUT);
 
-        for (const subTask of subTasks) {
-            cnt += 1;
-            // if task is new, reset the counter
-            if (!memoryStream.hasTask(subTask)) {
-                cnt = 0;
+        if (subTasks && subTasks.length > 0) {
+            for (const subTask of subTasks) {
+                // Gestiamo l'oggetto azione restituito dal nuovo topDownActions
+                let taskString = typeof subTask === 'string' ? subTask : (subTask.task || "");
+
+                if (taskString) {
+                    if (!memoryStream.hasTask(taskString)) {
+                        cnt = 0;
+                    } else {
+                        cnt += 1;
+                    }
+                }
             }
         }
     }
 
-    // if the repeated task appears for larger than thresholdD, switch
+    // 3. LOGICA DI SWITCH BASATA SULLA STASI (D)
+    // Se il bot ripete lo stesso task troppo a lungo (es. incastrato), cambia modalità
     if (!changed && (switchCondition === "D" || switchCondition === "H") && (cnt >= thresholdD)) {
         isBottomUp = !isBottomUp;
+        cnt = 0; // Resettiamo dopo lo switch per evitare loop di cambiamento
     }
 
     return {

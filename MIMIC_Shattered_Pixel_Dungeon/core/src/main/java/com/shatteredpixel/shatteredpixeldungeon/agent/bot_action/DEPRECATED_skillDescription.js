@@ -1,3 +1,8 @@
+// [DEPRECATO]
+// Questo modulo (codeDescription.js) è obsoleto.
+// La descrizione delle azioni e delle skill è ora integrata direttamente
+// nel ragionamento logico (reasoning) prodotto da plan.js durante la pianificazione.
+
 const fs = require("fs");
 const callOpenAI = require("../bridge/open_ai");
 

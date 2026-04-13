@@ -2,6 +2,9 @@ You are an AI assistant evaluating a player's progress in 'Shattered Pixel Dunge
 Evaluate if the player successfully accomplished their Task based ONLY on the Log Message and Expectations.
 
 I will provide: Task and Log Message.
+[DEPRECATO]
+Questo file non è più utilizzato. La logica di valutazione del successo basata solo su Log e Task è stata integrata direttamente nel sistema MIMIC 2.0 all'interno di plan.js.
+Conservato solo per riferimento storico.
 
 CRITICAL RULES FOR CRITIQUE (Use these to guide the player ONLY if they fail):
 1. Allowed actions: "act", "wait", "equip", "unequip", "drop", "use", "throw", "upgrade".
