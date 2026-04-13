@@ -1,24 +1,23 @@
-// [AGGIORNATO - MIMIC 2.0]
-// Rimosse dipendenze da summarize, planDecide e planDecompose.
+// [AGGIORNATO - MIMIC 2.0 Resilience Edition]
+// Gestione ottimizzata dell'environment e dei tempi di attesa per Gemini Free Tier.
 
-const {plan} = require("../bot_action/plan");
-const {getStatus, actAndFeedback} = require("./client");
-const {sendMessage} = require("./sendMessage");
+const { plan } = require("../bot_action/plan");
+const { getStatus, actAndFeedback } = require("./client");
+const { sendMessage } = require("./sendMessage");
 
 const BOT_LOG_MSG = "bridge.bottomUpActions:log";
-const BOT_ERR_MSG ="bridge.bottomUpActions:error";
+const BOT_ERR_MSG = "bridge.bottomUpActions:error";
 
-// Funzione per mettere in pausa il bot per stabilità API e sincronizzazione server
+// Funzione per mettere in pausa il bot (stabilità API e sincronizzazione)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// --- VARIABILI GLOBALI PER LA MEMORIA A BREVE TERMINE ---
+// Variabili globali per la continuità turn-by-turn
 let lastTaskDone = null;
 let lastFeedbackRcvd = null;
 let lastStatusRcvd = null;
 
 /**
- * Esegue le azioni bottom-up del bot usando l'architettura MIMIC 2.0.
- * Valuta il turno precedente e pianifica il prossimo in un'unica chiamata.
+ * Esegue le azioni reattive (Bottom-Up) del bot.
  */
 async function bottomUpActions(socket, skillManager, memoryStream,
                                PERSONALITY, RETRIEVE_IS_BOTH,
@@ -26,7 +25,6 @@ async function bottomUpActions(socket, skillManager, memoryStream,
 
     // 1. RECUPERO DELLO STATO CORRENTE
     const currentStatus = await getStatus(socket)
-        .then(response => response)
         .catch(error => {
             sendMessage(socket, `${BOT_ERR_MSG} Errore nel fetching status: ${error}`);
             return null;
@@ -34,77 +32,106 @@ async function bottomUpActions(socket, skillManager, memoryStream,
 
     if (!currentStatus) return null;
 
-    sendMessage(socket, `${BOT_LOG_MSG} Stato corrente acquisito.`);
+    // --- FILTRO ULTRA-RESILIENTE  ---
+    if (currentStatus.environment && Array.isArray(currentStatus.environment)) {
+        const heroPos = currentStatus["hero position in xy"];
 
-    // 2. IL MEGA-PROMPT (Architettura Single-Shot)
-    // Passiamo il risultato del turno precedente direttamente a Gemini.
-    // Non serve più il ciclo while perché l'IA si autocorregge leggendo lastFeedbackRcvd.
+        // Controllo di sicurezza: l'eroe ha una posizione valida?
+        if (heroPos && Array.isArray(heroPos) && heroPos.length >= 2) {
+            currentStatus.environment = currentStatus.environment.filter(item => {
+                try {
+                    // Estraiamo tutti i valori dell'oggetto (es: [ [14, 13] ])
+                    const values = Object.values(item);
+                    if (values.length === 0) return false;
+
+                    // Cerchiamo attivamente l'array che contiene le coordinate [x, y]
+                    const coords = values.find(v => Array.isArray(v) && v.length >= 2);
+
+                    if (coords) {
+                        const dx = Math.abs(coords[0] - heroPos[0]);
+                        const dy = Math.abs(coords[1] - heroPos[1]);
+                        // Teniamo solo i tile nel raggio di 8 per alleggerire il prompt
+                        return dx <= 8 && dy <= 8;
+                    }
+                } catch (e) {
+                    return false; // Se il tile è strano, lo scartiamo e non crashiamo
+                }
+                return false;
+            });
+        }
+    }
+
+    sendMessage(socket, `${BOT_LOG_MSG} Stato acquisito (Environment ottimizzato a raggio 8).`);
+
+    // 2. CHIAMATA AL MEGA-PROMPT (Architettura Single-Shot)
     const megaPlan = await plan(
         socket, memoryStream, currentStatus, PERSONALITY,
-        [], // latestBadPlans svuotato: la memoria ora è gestita tramite feedback
+        [], // Bad plans svuotati: gestiti dal feedback turn-by-turn
         lastTaskDone, lastFeedbackRcvd,
         RETRIEVE_IS_BOTH, "bottomUp"
     );
 
+    // Se l'API restituisce un errore (Quota Exceeded 429 o Service Unavailable 503)
     if (!megaPlan || !megaPlan.nextAction) {
-        sendMessage(socket, `${BOT_ERR_MSG} Il Piano generato è NULL o non valido.`);
+        const cooldown = 40000; // 40 secondi di attesa forzata
+        sendMessage(socket, `${BOT_ERR_MSG} API Busy o Quota esaurita. Pausa di ${cooldown/1000}s...`);
+        await sleep(cooldown);
         return null;
     }
 
     const nextAction = megaPlan.nextAction;
     const memoryUpdate = megaPlan.memoryUpdate;
 
-    // 3. AGGIORNAMENTO MEMORIA SOGGETTIVA E VETTORIALE
-    // Analizziamo cosa è successo nel turno precedente prima di procedere.
+    // 3. AGGIORNAMENTO MEMORIA SOGGETTIVA
     if (lastTaskDone && memoryUpdate && lastStatusRcvd) {
-
-        const isError = lastFeedbackRcvd && lastFeedbackRcvd.includes("Error");
+        const isError = lastFeedbackRcvd && (lastFeedbackRcvd.includes("Error") || lastFeedbackRcvd.includes("no path"));
         const memoryType = isError ? "error" : "event";
         const errMsg = isError ? lastFeedbackRcvd : "";
-        const mapStatusString = JSON.stringify(lastStatusRcvd);
 
         await memoryStream.addMemory(
-            memoryType,                         // event o error
-            memoryUpdate.success,               // Boolean dal Mega-Prompt
-            Date.now(),                         // timeCreated
-            0,                                  // timeExpired
-            Date.now(),                         // lastAccessed
-            lastTaskDone,                       // Il task appena concluso
-            nextAction.action,                  // L'azione tecnica scelta
-            JSON.stringify(nextAction.tile),    // Il tile target
+            memoryType,
+            memoryUpdate.success,
+            Date.now(),
+            0,
+            Date.now(),
+            lastTaskDone,
+            nextAction.action,
+            JSON.stringify(nextAction.tile),
             nextAction.item1 || "null",
             nextAction.item2 || "null",
-            mapStatusString,                    // Stato precedente (cruciale per Embedding)
-            memoryUpdate.reasoning,             // Ragionamento soggettivo del bot
-            "",                                 // decideReason (deprecato)
-            "",                                 // summarizeReason (deprecato)
-            "",                                 // code (deprecato)
-            "",                                 // skills
-            memoryUpdate.critique || "",        // Critica costruttiva se ha fallito
-            errMsg                              // Messaggio di errore tecnico
+            JSON.stringify(lastStatusRcvd),
+            memoryUpdate.reasoning,
+            "", "", "", "",
+            memoryUpdate.critique || "",
+            errMsg
         );
-
-        sendMessage(socket, `${BOT_LOG_MSG} Memoria salvata correttamente per: ${lastTaskDone}`);
+        sendMessage(socket, `${BOT_LOG_MSG} Memoria salvata per: ${lastTaskDone}`);
     }
 
-    // 4. ESECUZIONE DELL'AZIONE SUL SERVER DI GIOCO
+    // 4. ESECUZIONE AZIONE
     const feedback = await actAndFeedback(socket, nextAction)
-        .then(response => response)
         .catch(error => {
             sendMessage(socket, `${BOT_ERR_MSG} Errore durante l'azione: ${error}`);
             return { logs: "", errors: "Errore di connessione durante l'azione" };
         });
 
-    sendMessage(socket, `${BOT_LOG_MSG} Feedback ricevuto: ${JSON.stringify(feedback)}`);
+    sendMessage(socket, `${BOT_LOG_MSG} Feedback ricevuto dal server.`);
 
-    // 5. SALVATAGGIO STATO PER IL PROSSIMO TURNO
-    // Queste variabili verranno passate al Mega-Prompt nel prossimo ciclo.
+    // 5. PREPARAZIONE PER IL TURNO SUCCESSIVO
     lastTaskDone = nextAction.task;
     lastFeedbackRcvd = (feedback.errors && feedback.errors !== "") ? feedback.errors : feedback.logs;
     lastStatusRcvd = currentStatus;
 
-    // Pausa di sicurezza: evita il flooding del server e rispetta i rate limit di Gemini
-    await sleep(2000);
+    // --- GESTIONE DINAMICA DEL RITMO (PROTEZIONE QUOTA) ---
+    let finalSleep = 6000; // Default 6 secondi (ideale per 10-15 RPM)
+
+    if (lastFeedbackRcvd.includes("429") || lastFeedbackRcvd.includes("Quota")) {
+        finalSleep = 45000; // Se rileviamo un limite raggiunto, ci fermiamo per 45s
+        sendMessage(socket, `${BOT_LOG_MSG} [RATE LIMIT] Cooldown lungo attivato.`);
+    }
+
+    sendMessage(socket, `${BOT_LOG_MSG} Turno finito. Attesa: ${finalSleep/1000}s`);
+    await sleep(finalSleep);
 
     return nextAction;
 }
