@@ -2,123 +2,113 @@ const {sendMessage} = require("./sendMessage");
 
 /**
  * Get the status of the bot
- * @param socket The WebSocket connection
- * @returns {Promise<JSON>} The status of the hero in the game
  */
 async function getStatus(socket) {
     sendMessage(socket, "GetStatus");
 
     return new Promise(function(resolve) {
-        let timeout = setTimeout(() => {
-            // Timeout after 10 seconds and send another message
-            sendMessage(socket, "No status response received within 10 seconds.");
-            sendMessage(socket, "GetStatus");
-
-        }, 10000); // 10 seconds
-
-        socket.onmessage = async function(event) {
+        // Funzione handler per gestire il messaggio specifico
+        const handler = (event) => {
             let msg = JSON.parse(event.data);
-
             if (msg.msgType === "status") {
-                clearTimeout(timeout); // Clear the timeout if the message is received in time
+                socket.removeEventListener('message', handler);
+                clearTimeout(timeout);
                 resolve(msg);
             }
         };
+
+        socket.addEventListener('message', handler);
+
+        let timeout = setTimeout(() => {
+            socket.removeEventListener('message', handler);
+            sendMessage(socket, "GetStatus");
+        }, 20000);
     });
 }
 
 /**
- * Send action request and get the feedback from the server
- * @param socket The WebSocket connection
- * @param plan The plan to act
- * @returns {Promise<JSON>}
+ * Send action request and get the feedback
  */
 async function actAndFeedback(socket, plan) {
     sendMessage(socket, `ACTION: ${JSON.stringify(plan)}`);
 
     return new Promise(function(resolve) {
+        const handler = (event) => {
+            let msg = JSON.parse(event.data);
+            if (msg.msgType === "feedback") {
+                socket.removeEventListener('message', handler);
+                clearTimeout(timeout);
+                resolve(msg);
+            }
+        };
+
+        socket.addEventListener('message', handler);
+
         let timeout = setTimeout(() => {
-            // Timeout after 10 seconds and send another message
-            sendMessage(socket, "No feedback response received within 10 seconds.");
+            socket.removeEventListener('message', handler);
             sendMessage(socket, `ACTION: ${JSON.stringify(plan)}`);
-
-        }, 10000); // 10 seconds
-
-        socket.onmessage = async function(event) {
-            let msg = JSON.parse(event.data);
-
-            if (msg.msgType === "feedback") {
-                clearTimeout(timeout); // Clear the timeout if the message is received in time
-                resolve(msg);
-            }
-        };
+        }, 20000);
     });
 }
 
 /**
- * Send code running request and get the feedback from the server
- * @param socket The WebSocket connection
- * @param code The code to be compiled and run
- * @returns {Promise<JSON>}
+ * Ottimizza e filtra lo stato per risparmiare token (Anti-429)
  */
-async function runAndFeedback(socket, code) {
-    sendMessage(socket, `ACTION: ${JSON.stringify(code)}`);
-
-    return new Promise(function(resolve) {
-        socket.onmessage = async function (event) {
-            let msg = JSON.parse(event.data);
-
-            if (msg.msgType === "feedback") {
-                resolve(msg);
-            }
-        };
-    });
-}
-
 /**
- * Convert the status to a prompt
- * @param {JSON} status The status of the hero in the game
- * @param {String} prefix The prefix of the prompt
- * @returns {String} The prompt of the status
+ * Convert the status to a prompt - Versione Robust (Anti-Crash)
  */
 function status2Prompt(status, prefix="") {
-
     if (!status) return "Nessuno stato disponibile.";
 
-    let res= "";
+    let res = "";
 
-    // Questa funzione ignorerà tutte le chiavi "description" quando converte i dati in testo,
-    // salvando decine di migliaia di token per ogni passo
     const tokenSaver = (key, value) => {
-        if (key === "description") return undefined;
+        if (key === "description" || key === "name") return undefined;
         return value;
     };
 
     // Hero Status
-    res += `${prefix}health: ${status.health}/${status.maxHealth}\n`;
-    res += `${prefix}level: ${status.level}\n`;
-    res += `${prefix}experience: ${status.experience}/${status.maxExperience}\n`;
-    res += `${prefix}strength: ${status.strength}\n`;
-    res += `${prefix}gold: ${status.gold}\n`;
-    res += `${prefix}hero position in xy: [${status.heroPositionInXY}]\n`;
+    res += `${prefix}HP: ${status.health}/${status.maxHealth} | Lvl: ${status.level} | Pos: [${status.heroPositionInXY}]\n`;
+    res += `${prefix}Gold: ${status.gold} | Depth: ${status.depth}\n`;
 
-    // Applichiamo il filtro tokenSaver a buff, talenti, equipaggiamento e inventario
-    res += `${prefix}buffs/debuffs: ${JSON.stringify(status.buffs, tokenSaver)}\n`;
+    // --- FIX PER L'INVENTARIO ---
+    // Se status.items è un oggetto, usiamo Object.values() per renderlo un array
+    const rawItems = status.items || {};
+    const itemsArray = Array.isArray(rawItems) ? rawItems : Object.values(rawItems);
 
-    // Hero Talents
-    res += `${prefix}free talent points: ${JSON.stringify(status.freeTalentPoints)}\n`;
-    res += `${prefix}talents: ${JSON.stringify(status.currTalents, tokenSaver)}\n`;
+    const invNames = itemsArray.map(i => {
+        const keys = Object.keys(i);
+        // Filtriamo tutte le chiavi tecniche per trovare il vero nome dell'oggetto
+        const technicalKeys = ["quantity", "identified", "level", "STRReq", "category", "description", "name", "price", "identifiedName"];
+        const realName = keys.find(k => !technicalKeys.includes(k));
 
-    // Hero Equipment
-    res += `${prefix}equipments: ${JSON.stringify(status.equipments, tokenSaver)}\n`;
+        return realName || i.name || "oggetto_sconosciuto";
+    });
 
-    // Hero Inventory
-    res += `${prefix}inventory: ${JSON.stringify(status.items, tokenSaver)}\n`;
-    res += `${prefix}keys: ${JSON.stringify(status.keys)}\n`;
+    res += `${prefix}Inventory: ${invNames.join(", ")}\n`;
 
-    // Environment
-    res += `${prefix}depth: ${status.depth}\n`;
-    res += `${prefix}environment: ${JSON.stringify(status.environment)}\n`;
+    // --- FIX PER L'EQUIPAGGIAMENTO ---
+    const rawEquip = status.equipments || {};
+    const equipArray = Array.isArray(rawEquip) ? rawEquip : Object.values(rawEquip);
+    const equipNames = equipArray.map(e => e.name || "item");
+    res += `${prefix}Equip: ${equipNames.join(", ")}\n`;
+
+    // Environment filtrato (cruciale per i token)
+    if (status.environment) {
+        // Gestiamo anche l'environment se fosse un oggetto
+        const envArray = Array.isArray(status.environment) ? status.environment : Object.values(status.environment);
+
+        const crucialEnv = envArray.filter(tile => {
+            const tileStr = JSON.stringify(tile).toLowerCase();
+            return tileStr.includes("mob") ||
+                tileStr.includes("door") ||
+                tileStr.includes("chest") ||
+                tileStr.includes("trap") ||
+                tileStr.includes("guerriero");
+        });
+
+        res += `${prefix}Environment (Crucial): ${JSON.stringify(crucialEnv.slice(0, 15), tokenSaver)}\n`;
+    }
 
     return res;
 }
@@ -127,5 +117,5 @@ module.exports = {
     getStatus,
     status2Prompt,
     actAndFeedback,
-    runAndFeedback,
+    runAndFeedback: actAndFeedback, // Spesso sono identici nel bridge
 };

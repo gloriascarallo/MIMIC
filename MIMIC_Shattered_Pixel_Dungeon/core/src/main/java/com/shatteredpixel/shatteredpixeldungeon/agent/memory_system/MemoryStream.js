@@ -411,7 +411,8 @@ class MemoryStream {
                 this.memories, BOT_LOG_MSG, BOT_ERR_MSG);
 
             // Do analysis
-            analysis = await preferenceAnalyze(this.socket, this.rootPath, this.persona, JSON.stringify(newMemory.summaryForPA()), newMemory.memoryID);
+            analysis= "Disabilitata per risparmio quote";
+            //analysis = await preferenceAnalyze(this.socket, this.rootPath, this.persona, JSON.stringify(newMemory.summaryForPA()), newMemory.memoryID);
         }
 
         if (memoryType === "event") {
