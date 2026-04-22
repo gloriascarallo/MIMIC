@@ -11,7 +11,7 @@ let isCallingAPI = false;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function callOpenAI(socket, context, input, LogMsg,
-                          model="gemini-2.5-flash",
+                          model="gpt-4o",
                           printInput=false, printContext=false, printAnswer=true,
                           isInJSON=true) {
 
@@ -35,14 +35,19 @@ async function callOpenAI(socket, context, input, LogMsg,
     let isQualified = false;
     let answer = "";
 
+    // Sicurezza contro i Loop Infiniti di JSON corrotto
+    let formatAttempts = 0;
+    const maxFormatAttempts = 3;
+
     try {
 
-        while (!isQualified) {
-            // Puntiamo al proxy LiteLLM locale invece che direttamente a Google
+        while (!isQualified && formatAttempts < maxFormatAttempts) {
+            formatAttempts++;
+
             const URL = `http://localhost:4000/v1/chat/completions`;
 
             const body = {
-                model: model, // Qui passeremo "gpt-4o" dal file plan.js
+                model: model,
                 messages: [
                     { role: "system", content: context },
                     { role: "user", content: input }
@@ -51,8 +56,8 @@ async function callOpenAI(socket, context, input, LogMsg,
             };
 
             let data = null;
-            let currentWaitTime = 15000;
-            const maxRetries = 7;
+            let currentWaitTime = 10000; // Partiamo da 10 secondi
+            const maxRetries = 3; // <-- Ridotto da 7 a 3 per non far impazzire il bot
 
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 const response = await fetch(URL, {
@@ -66,11 +71,10 @@ async function callOpenAI(socket, context, input, LogMsg,
 
                 if (!response.ok) {
                     console.error(`\n>>> [ERRORE PROXY]: ${response.status} - ${response.statusText}`);
-                    // Se LiteLLM o Google sono sovraccarichi, facciamo il retry
                     if (response.status === 429 || response.status >= 500) {
-                        sendMessage(socket, `${AI_LOG_MSG} Proxy/Google occupato. Tentativo ${attempt}/${maxRetries}...`);
+                        sendMessage(socket, `${AI_LOG_MSG} Proxy/Google occupato. Tentativo ${attempt}/${maxRetries}... Attesa ${currentWaitTime/1000}s`);
                         await sleep(currentWaitTime);
-                        currentWaitTime *= 2;
+                        currentWaitTime *= 2; // Backoff esponenziale
                         continue;
                     }
                     return null;
@@ -81,7 +85,6 @@ async function callOpenAI(socket, context, input, LogMsg,
 
             if (!data) return null;
 
-            // LiteLLM restituisce il formato standard OpenAI
             try {
                 answer = data.choices[0].message.content.trim();
             } catch (e) {
@@ -98,23 +101,28 @@ async function callOpenAI(socket, context, input, LogMsg,
                     const lastBracket = answer.lastIndexOf('}');
 
                     if (firstBracket !== -1 && lastBracket !== -1) {
-                        // Estrae solo la parte tra { e }
                         answer = answer.substring(firstBracket, lastBracket + 1).trim();
                     }
 
                     JSON.parse(answer); // Validazione
                     isQualified = true;
                 } catch (e) {
-                    sendMessage(socket, `${AI_ERR_MSG} JSON Corrotto, riprovo... ${e}`);
+                    sendMessage(socket, `${AI_ERR_MSG} JSON Corrotto (Tentativo ${formatAttempts}/${maxFormatAttempts}). Riprovo...`);
                     isQualified = false;
+                    // Se falliamo 3 volte, fermiamo tutto per non esaurire la quota
+                    if (formatAttempts >= maxFormatAttempts) {
+                        sendMessage(socket, `${AI_ERR_MSG} Impossibile ottenere un JSON valido dopo ${maxFormatAttempts} tentativi. Annullamento.`);
+                        return null;
+                    }
                 }
             } else {
                 isQualified = true;
             }
         }
 
-        // --- COOLDOWN RPM (15 RICHIESTE AL MINUTO) ---
-        await sleep(30000);
+        // --- COOLDOWN RPM ---
+        // 10 secondi bastano (insieme agli altri sleep) per restare sotto le 15 RPM
+        await sleep(10000);
         return answer;
 
     } finally {

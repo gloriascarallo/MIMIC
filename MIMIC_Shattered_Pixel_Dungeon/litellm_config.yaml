@@ -1,11 +1,11 @@
 model_list:
   - model_name: gpt-4o
     litellm_params:
-      model: gemini/gemini-2.5-flash
+      model: gemini/gemini-2.0-flash-lite-001
       api_key: os.environ/GEMINI_API_KEY
   - model_name: gpt-3.5-turbo-instruct
     litellm_params:
-      model: gemini/gemini-2.5-flash
+      model: gemini/gemini-2.0-flash-lite-001
       api_key: os.environ/GEMINI_API_KEY
 
 litellm_settings:
