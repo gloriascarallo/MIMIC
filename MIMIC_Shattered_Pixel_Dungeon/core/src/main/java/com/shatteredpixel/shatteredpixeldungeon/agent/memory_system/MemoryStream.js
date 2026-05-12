@@ -356,11 +356,16 @@ class MemoryStream {
 
         for (let i of Object.keys(memories)) {
             let analysis = await loadFile(`${this.rootPath}/${this.persona}/analysis/id${i}.txt`, BOT_ERR_MSG);
+
             await this.addMemory(memories[i].memoryType, memories[i].isSuccess,
                 memories[i].timeCreated, memories[i].timeExpired, memories[i].lastAccessed,
                 memories[i].task, memories[i].action, memories[i].tile, memories[i].item1, memories[i].item2,
                 memories[i].previousStatus, memories[i].planReason, memories[i].decideReason, memories[i].summarizeReason,
                 memories[i].code, memories[i].skills, memories[i].critique, memories[i].errorMessage, analysis, true);
+
+            // --- Add a delay here to prevent rate limiting during startup ---
+            sendMessage(this.socket, `${BOT_LOG_MSG} Loaded memory ${i}. Sleeping to respect rate limits...`);
+            await sleep(3000); // Wait 3 seconds between loading each memory
         }
     }
 
