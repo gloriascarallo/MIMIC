@@ -48,9 +48,17 @@ async function bottomUpActions(socket, skillManager, memoryStream,
                     const coords = values.find(v => Array.isArray(v) && v.length >= 2);
 
                     if (coords) {
+                        // ... dentro il tuo filtro raggio 8 ...
                         const dx = Math.abs(coords[0] - heroPos[0]);
                         const dy = Math.abs(coords[1] - heroPos[1]);
-                        // Teniamo solo i tile nel raggio di 8 per alleggerire il prompt
+
+// Se l'oggetto è la scala, tienilo in memoria SEMPRE, anche a distanza 50!
+                        const itemStr = JSON.stringify(item).toLowerCase();
+                        if (itemStr.includes("stairs") || itemStr.includes("locked_stairs")) {
+                            return true;
+                        }
+
+// Per tutto il resto (mostri, erba, pozioni), applica il taglio del raggio 8
                         return dx <= 8 && dy <= 8;
                     }
                 } catch (e) {

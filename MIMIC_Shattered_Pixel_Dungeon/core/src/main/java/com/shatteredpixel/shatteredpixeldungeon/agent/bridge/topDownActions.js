@@ -33,13 +33,14 @@ async function topDownActions(socket, skillManager, memoryStream,
 
     if (!previousStatus) return null;
 
-    // --- FILTRO ULTRA-RESILIENTE (Sostituisci il vecchio blocco environment.filter) ---
-    if (currentStatus.environment && Array.isArray(currentStatus.environment)) {
-        const heroPos = currentStatus["hero position in xy"];
+    // --- FILTRO ULTRA-RESILIENTE ---
+    // CORRETTO: Usa previousStatus invece di currentStatus
+    if (previousStatus.environment && Array.isArray(previousStatus.environment)) {
+        const heroPos = previousStatus["hero position in xy"];
 
         // Controllo di sicurezza: l'eroe ha una posizione valida?
         if (heroPos && Array.isArray(heroPos) && heroPos.length >= 2) {
-            currentStatus.environment = currentStatus.environment.filter(item => {
+            previousStatus.environment = previousStatus.environment.filter(item => {
                 try {
                     // Estraiamo tutti i valori dell'oggetto (es: [ [14, 13] ])
                     const values = Object.values(item);
@@ -51,7 +52,14 @@ async function topDownActions(socket, skillManager, memoryStream,
                     if (coords) {
                         const dx = Math.abs(coords[0] - heroPos[0]);
                         const dy = Math.abs(coords[1] - heroPos[1]);
-                        // Teniamo solo i tile nel raggio di 8 per alleggerire il prompt
+
+                        // --- IL RADAR DELLE SCALE (Anche in Top-Down!) ---
+                        const itemStr = JSON.stringify(item).toLowerCase();
+                        if (itemStr.includes("stairs") || itemStr.includes("locked_stairs")) {
+                            return true; // Tieni sempre le scale in memoria
+                        }
+
+                        // Teniamo gli altri tile solo se nel raggio di 8 per alleggerire il prompt
                         return dx <= 8 && dy <= 8;
                     }
                 } catch (e) {

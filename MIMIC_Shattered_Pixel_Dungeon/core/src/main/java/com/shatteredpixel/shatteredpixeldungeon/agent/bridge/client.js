@@ -100,10 +100,19 @@ function status2Prompt(status, prefix="") {
 
         const crucialEnv = envArray.filter(tile => {
             const tileStr = JSON.stringify(tile).toLowerCase();
+
+            // Nascondi le porte già aperte
+            if (tileStr.includes("open_door")) {
+                return false; // Se è aperta, scartala dal radar!
+            }
+
+            // 2. LA LISTA DI COSA PUÒ VEDERE L'IA
             return tileStr.includes("mob") ||
-                tileStr.includes("door") ||
+                tileStr.includes("door") ||       // Prenderà "door" e "locked_door", ma non "open_door"
                 tileStr.includes("chest") ||
                 tileStr.includes("trap") ||
+                tileStr.includes("stairs") ||
+                tileStr.includes("locked_stairs") ||
                 tileStr.includes("guerriero");
         });
 

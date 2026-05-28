@@ -197,23 +197,49 @@ class MemoryStream {
 
         // Connessione DIRETTA e GRATUITA ai server di Google per la memoria
         // Creiamo un nostro Embedder personalizzato che punta alla v1beta
+        // Connessione DIRETTA e GRATUITA ai server di Google per la memoria
+        // Embedder personalizzato e RESILIENTE (Anti-Crash)
         this.embedder = {
             generate: async (texts) => {
                 let results = [];
                 for (let text of texts) {
-                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${process.env.GOOGLE_API_KEY}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            model: "models/gemini-embedding-001",
-                            content: { parts: [{ text: text }] }
-                        })
-                    });
-                    const data = await res.json();
-                    if (data.error) throw new Error("Errore API Google: " + data.error.message);
-                    results.push(data.embedding.values);
+                    let success = false;
+                    let retries = 3; // Proviamo per 3 volte prima di arrenderci
 
-                    await sleep(4500);
+                    while (!success && retries > 0) {
+                        try {
+                            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${process.env.GOOGLE_API_KEY}`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    model: "models/gemini-embedding-001",
+                                    content: { parts: [{ text: text }] }
+                                })
+                            });
+
+                            const data = await res.json();
+
+                            if (data.error) {
+                                console.log(`[MemoryStream] Server Google API occupato (${data.error.message}). Tentativi rimasti: ${retries - 1}`);
+                                retries--;
+                                await sleep(15000); // Aspettiamo 15 secondi se Google è offline
+                            } else {
+                                results.push(data.embedding.values);
+                                success = true;
+                                await sleep(4500); // Pausa di cortesia standard
+                            }
+                        } catch (err) {
+                            console.log(`[MemoryStream] Errore di rete: ${err.message}. Tentativi rimasti: ${retries - 1}`);
+                            retries--;
+                            await sleep(15000);
+                        }
+                    }
+
+                    // Se dopo 3 tentativi Google è ancora morto, inseriamo un vettore vuoto per NON far crashare ChromaDB
+                    if (!success) {
+                        console.log(`[MemoryStream] Vettorizzazione fallita definitivamente. Uso un vettore neutro di salvataggio.`);
+                        results.push(new Array(768).fill(0));
+                    }
                 }
                 return results;
             }
@@ -346,16 +372,29 @@ class MemoryStream {
         return this.tasks.includes(task);
     }
 
+
     /**
      * Inherit the history from existed skill library
      * @returns {Promise<void>}
      */
     async inheritHistory() {
+        const fs = require('fs'); // Importiamo fs per fare il controllo di sicurezza
+
         let memories = await loadFile(`${this.rootPath}/${this.persona}/${this.persona}.json`, BOT_ERR_MSG);
         memories = JSON.parse(memories);
 
         for (let i of Object.keys(memories)) {
-            let analysis = await loadFile(`${this.rootPath}/${this.persona}/analysis/id${i}.txt`, BOT_ERR_MSG);
+            let analysis = "";
+            const pathAnalisiTxt = `${this.rootPath}/${this.persona}/analysis/id${i}.txt`;
+
+            // Controllo "Ultra-Resiliente": se il file non c'è, non crashare!
+            if (fs.existsSync(pathAnalisiTxt)) {
+                analysis = await loadFile(pathAnalisiTxt, BOT_ERR_MSG);
+            } else {
+                // Se il file .txt è assente (perché stiamo risparmiando quote API),
+                // diciamo a ChromaDB di vettorizzare l'analisi JSON o il placeholder.
+                analysis = memories[i].summarizeReason || memories[i].critique || "Disabilitata per risparmio quote";
+            }
 
             await this.addMemory(memories[i].memoryType, memories[i].isSuccess,
                 memories[i].timeCreated, memories[i].timeExpired, memories[i].lastAccessed,

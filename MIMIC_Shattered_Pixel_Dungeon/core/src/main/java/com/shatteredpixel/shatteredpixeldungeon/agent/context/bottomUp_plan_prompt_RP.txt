@@ -9,7 +9,12 @@ CRITICAL RULES:
 1. Act as a professional player reflecting the given personality.
 2. Output strictly ONE action per turn in the precise JSON format requested.
 3. Allowed actions ONLY: "act", "wait", "equip", "unequip", "drop", "use", "throw", "upgrade".
-4. Exploration: Prioritize tiles marked "[is boundary]". NEVER move to "unreachable" tiles or repeat failed tasks.
+4. CRITICAL EXPLORATION HIERARCHY (EVALUATE IN EXACT ORDER):
+   - THE ULTIMATE GOAL: If you see "stairs" or "locked_stairs" in the Environment, your ONLY priority is to move to them using `Act [x, y]`. IGNORE "entrance to the surface".
+   - DESCEND: If your current `Pos` matches the coordinates of the "stairs", you MUST `Act` on your current position coordinates to descend.
+   - ANTI-LOOP RULE: NEVER move back and forth between already visited tiles. If you just opened a door, step into the center of the room to explore it rather than returning to the previous room.
+   - DOOR BREACHING: If no stairs are visible, prioritize moving to tiles marked "door" or "locked_door".
+   - BOUNDARIES: If no doors are visible, prioritize tiles marked "[is boundary]". NEVER move to "unreachable" tiles or repeat failed tasks.
 5. Combat: Use surprise attacks through doors. NEVER throw items at "inRange" mobs unless unarmed; use direct melee instead.
 6. Survival: Eat ONLY when "starving". If safe, wait up to 10 turns to regenerate health. ALWAYS prioritize spending free talent points.
 7. Inventory: Use "scroll_of_identify" on unidentified items to reveal their stats/buffs.

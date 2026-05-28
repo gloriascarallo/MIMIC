@@ -19,6 +19,7 @@ async function hybridActions(socket, skillManager, memoryStream,
                              switchCondition="S", thresholdD=20, thresholdS=30) {
 
     let changed = false;
+    let actionPayload = null; // <--- NOVITÀ: Variabile per salvare l'azione calcolata
 
     // 1. LOGICA DI SWITCH BASATA SULL'ESPERIENZA (S)
     // Se la memoria è sufficientemente popolata, passiamo a una visione più strategica.
@@ -35,6 +36,7 @@ async function hybridActions(socket, skillManager, memoryStream,
     if (isBottomUp) {
         // --- MODALITÀ REATTIVA ---
         let newActionObj = await bottomUpActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, TIMEOUT);
+        actionPayload = newActionObj; // <--- Salviamo il payload per agentClient
 
         if (newActionObj && newActionObj.task) {
             // Se l'azione è valida, aggiorniamo il contatore di stasi (cnt)
@@ -52,6 +54,8 @@ async function hybridActions(socket, skillManager, memoryStream,
 
         if (subTasks && subTasks.length > 0) {
             const subTask = subTasks[0]; // Prendiamo la singola azione atomica
+            actionPayload = subTask; // <--- Salviamo il payload per agentClient
+
             let taskString = subTask.task || "";
 
             if (taskString) {
@@ -77,9 +81,11 @@ async function hybridActions(socket, skillManager, memoryStream,
         sendMessage(socket, `${BOT_LOG_MSG} [SWITCH] Rilevato loop/stasi. Cambiamento modalità in: ${mode}`);
     }
 
+    // 4. RESTITUIAMO TUTTO AL CLIENT PRINCIPALE
     return {
         isBottomUp: isBottomUp,
         cnt: cnt,
+        ...(actionPayload || {}) // <--- NOVITÀ: Questo trasferisce magicamente l'azione e la memoria ad agentClient.js!
     };
 }
 
