@@ -26,8 +26,8 @@ class Memory{
 
         // Basic Info
         this.memoryID = memoryID;
-        this.memoryType = memoryType;   // event / thought / error feedback
-        this.isSuccess = isSuccess;     // If it is event, if it is a success
+        this.memoryType = memoryType;
+        this.isSuccess = isSuccess;
 
         // Time related
         this.timeCreated = timeCreated;
@@ -55,10 +55,6 @@ class Memory{
         this.errorMessage = errorMessage;
     }
 
-    /**
-     * Get the S.P.O.B summary of this Memory
-     * @returns {string[]}
-     */
     svob_summary(){
         return [this.action, this.item1, this.item2];
     }
@@ -110,10 +106,7 @@ class Memory{
     badPlanSummary(){
         return{
             task: this.task,
-            // previousStatus: this.previousStatus,
-            // decideReason: this.decideReason,
             critique: this.critique,
-
         }
     }
 
@@ -152,26 +145,9 @@ class Memory{
             errorMessage: this.errorMessage,
         }
     }
-
-
 }
 
-/**
- * MemoryStream stores all the Memory created.
- */
 class MemoryStream {
-    /**
-     *
-     * @param socket
-     * @param {String} rootPath The root path for the Memory Stream, should be something like `../memory_system/${COLLECTION_NAME}/`
-     * @param {String} collectionName The name of the collection to be created
-     * @param {String} persona The agent persona
-     * @param {boolean} isInherit If it is an inheritance from the previous memory stream
-     * @param {String} similarityFunction The similarity function used to query the data from Chroma; Default: "cosine", Alternative: "l2" (Squared L2), "ip" (Inner product)
-     * @param {int} relevanceTopN The top n relevant memories selected when retrieving
-     * @param {int} preferenceTopN The top n preferred memories selected when retrieving
-     * @param {int} topN The top n selected for sending to Planner
-     */
     constructor(socket, rootPath, collectionName, persona, isInherit = false, similarityFunction = "cosine", relevanceTopN = 20, preferenceTopN = 20, topN = 5) {
         this.rootPath = rootPath;
         this.collectionName = collectionName;
@@ -196,15 +172,13 @@ class MemoryStream {
         this.latestBadPlans = [];
 
         // Connessione DIRETTA e GRATUITA ai server di Google per la memoria
-        // Creiamo un nostro Embedder personalizzato che punta alla v1beta
-        // Connessione DIRETTA e GRATUITA ai server di Google per la memoria
         // Embedder personalizzato e RESILIENTE (Anti-Crash)
         this.embedder = {
             generate: async (texts) => {
                 let results = [];
                 for (let text of texts) {
                     let success = false;
-                    let retries = 3; // Proviamo per 3 volte prima di arrenderci
+                    let retries = 3;
 
                     while (!success && retries > 0) {
                         try {
@@ -222,11 +196,11 @@ class MemoryStream {
                             if (data.error) {
                                 console.log(`[MemoryStream] Server Google API occupato (${data.error.message}). Tentativi rimasti: ${retries - 1}`);
                                 retries--;
-                                await sleep(15000); // Aspettiamo 15 secondi se Google è offline
+                                await sleep(15000);
                             } else {
                                 results.push(data.embedding.values);
                                 success = true;
-                                await sleep(4500); // Pausa di cortesia standard
+                                await sleep(5000); // <-- SICUREZZA: Allineato ai 5 secondi
                             }
                         } catch (err) {
                             console.log(`[MemoryStream] Errore di rete: ${err.message}. Tentativi rimasti: ${retries - 1}`);
@@ -235,7 +209,6 @@ class MemoryStream {
                         }
                     }
 
-                    // Se dopo 3 tentativi Google è ancora morto, inseriamo un vettore vuoto per NON far crashare ChromaDB
                     if (!success) {
                         console.log(`[MemoryStream] Vettorizzazione fallita definitivamente. Uso un vettore neutro di salvataggio.`);
                         results.push(new Array(768).fill(0));
@@ -253,24 +226,16 @@ class MemoryStream {
         this.socket = socket;
     }
 
-    /**
-     * Initialize the folders and the vectordb
-     * @returns {Promise<void>}
-     */
     async init(socket) {
-        // JUSTIFY HERE WHEN TESTING
         this.personaDescription = await loadFile(`./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/personalities/${this.persona}.txt`, BOT_ERR_MSG);
 
-        // Create the folders
         mkdir(this.rootPath, "", BOT_LOG_MSG, BOT_ERR_MSG);
         mkdir(this.rootPath, this.persona, BOT_LOG_MSG, BOT_ERR_MSG);
         mkdir(this.rootPath, `${this.persona}/analysis`, BOT_LOG_MSG, BOT_ERR_MSG);
 
-        // Define these somewhere earlier (e.g., in constructor or init)
         const tenant = "default_tenant";
         const database = "default_database";
 
-        // Delete collections if they exist
         try {
             await this.client.deleteCollection({
                 name: `${this.persona}_memory_collection_${this.collectionName}`,
@@ -334,7 +299,6 @@ class MemoryStream {
             }
         }
 
-        // Do inheritance if needed
         if (this.isInherit) {
             try {
                 await this.inheritHistory();
@@ -363,22 +327,12 @@ class MemoryStream {
         }
     }
 
-    /**
-     * To check if this task is created before
-     * @param task The task to be checked
-     * @returns {Promise<boolean>} If the task is created before
-     */
     async hasTask(task) {
         return this.tasks.includes(task);
     }
 
-
-    /**
-     * Inherit the history from existed skill library
-     * @returns {Promise<void>}
-     */
     async inheritHistory() {
-        const fs = require('fs'); // Importiamo fs per fare il controllo di sicurezza
+        const fs = require('fs');
 
         let memories = await loadFile(`${this.rootPath}/${this.persona}/${this.persona}.json`, BOT_ERR_MSG);
         memories = JSON.parse(memories);
@@ -387,12 +341,9 @@ class MemoryStream {
             let analysis = "";
             const pathAnalisiTxt = `${this.rootPath}/${this.persona}/analysis/id${i}.txt`;
 
-            // Controllo "Ultra-Resiliente": se il file non c'è, non crashare!
             if (fs.existsSync(pathAnalisiTxt)) {
                 analysis = await loadFile(pathAnalisiTxt, BOT_ERR_MSG);
             } else {
-                // Se il file .txt è assente (perché stiamo risparmiando quote API),
-                // diciamo a ChromaDB di vettorizzare l'analisi JSON o il placeholder.
                 analysis = memories[i].summarizeReason || memories[i].critique || "Disabilitata per risparmio quote";
             }
 
@@ -402,37 +353,11 @@ class MemoryStream {
                 memories[i].previousStatus, memories[i].planReason, memories[i].decideReason, memories[i].summarizeReason,
                 memories[i].code, memories[i].skills, memories[i].critique, memories[i].errorMessage, analysis, true);
 
-            // --- Add a delay here to prevent rate limiting during startup ---
             sendMessage(this.socket, `${BOT_LOG_MSG} Loaded memory ${i}. Sleeping to respect rate limits...`);
-            await sleep(3000); // Wait 3 seconds between loading each memory
+            await sleep(5000); // <-- FIX PRINCIPALE: 5 secondi per garantire < 15 richieste al minuto
         }
     }
 
-
-    /**
-     * Add a new memory into the MemoryStream.
-     * @param {string} memoryType The memory type to be stored (event / badPlan / error)
-     * @param {boolean} isSuccess If the Memory is an event, shows if this event is a success; If the Memory is not an event, the input should be false
-     * @param {number} timeCreated The time when the Memory is created
-     * @param {number} timeExpired The time when the Memory should be deleted
-     * @param {number} lastAccessed The time when the Memory is accessed last time
-     * @param {string} task The task given in this Memory
-     * @param {string} action The action of the task
-     * @param {number[]} tile The tile of the task
-     * @param {string} item1 The first item of the task
-     * @param {string} item2 The second item of the task
-     * @param {string} previousStatus The environment in Minecraft before running the code
-     * @param {string} planReason The reason why this plan is given out
-     * @param {string} decideReason The reason why this plan is approved or rejected
-     * @param {string} summarizeReason The reason why this action is done successfully or not
-     * @param {string} code The code of this Memory used
-     * @param {string} skills The skills of this Memory used
-     * @param {string} critique The critique for improving the next plan or action
-     * @param {string} errorMessage The error message, empty if not an error
-     * @param {string} analysis The memory analysis
-     * @param {boolean} isInheriting If it is currently inheriting the previous memory stream, skip the file writing part
-     * @returns {Promise<Memory|null>}
-     */
     async addMemory(memoryType, isSuccess,
                     timeCreated, timeExpired, lastAccessed,
                     task, action, tile, item1, item2,
@@ -442,7 +367,6 @@ class MemoryStream {
         const memoryID = this.memoryCount;
         this.tasks.push(task);
 
-        // TODO: Add into the library; Add into the collection, status as page content, task as metadata, id as id.
         const newMemory = new Memory(memoryID, memoryType, isSuccess,
             timeCreated, timeExpired, lastAccessed,
             task, action, tile, item1, item2,
@@ -453,10 +377,7 @@ class MemoryStream {
         if (!isInheriting) {
             await writeJSON(`${this.rootPath}/${this.persona}/${this.persona}.json`,
                 this.memories, BOT_LOG_MSG, BOT_ERR_MSG);
-
-            // Do analysis
             analysis= "Disabilitata per risparmio quote";
-            //analysis = await preferenceAnalyze(this.socket, this.rootPath, this.persona, JSON.stringify(newMemory.summaryForPA()), newMemory.memoryID);
         }
 
         if (memoryType === "event") {
@@ -494,7 +415,6 @@ class MemoryStream {
             sendMessage(this.socket, `${BOT_ERR_MSG} Failed to store memory ${(this.memoryCount - 1).toString()} in vectorStoreP. Error: ${e.message}`);
         }
 
-        // We don't consider badPlans
         if (memoryType === "badPlan") {
             newMemory.preference = INF;
             return newMemory;
@@ -507,16 +427,6 @@ class MemoryStream {
         return newMemory;
     }
 
-    /**
-     * Get all the Memories stored in the MemoryStream with the same S.P.O.B. as the inputted ones
-     * (Subject and Object considered as the same thing when considering the relevancy).
-     * @param {string} subject The subject of the Memory
-     * @param {string} verb The verb of the Memory
-     * @param {string} object The object of the Memory
-     * @param {string} biome The biome of the Memory
-     * @param {string} memoryType The memory type wanted to be searched
-     * @returns {{id: Memory}} A dict of the related memories with id as key and Memory as value
-     */
     getRelevantMemories(subject, verb, object, biome, memoryType="") {
         const memories = {};
 
@@ -537,21 +447,8 @@ class MemoryStream {
         return memories;
     }
 
-    /**
-     * Retrieve the memories using vectordb
-     * @param {String} query The query for the vectordb
-     * @param {number} alpha Default 0.5
-     * @param {number} beta Default 1
-     * @param {number} numNeeded The number of output expected (MUST BE EVEN)
-     * @param {boolean} isBoth If True, output top 5 of each measure (R & P); Otherwise, output top 10 of measure U (= αR + βP)
-     * @param {boolean} isIDOnly If True, output the memoryIDs ; Otherwise, output the retrieved results
-     * @param {boolean} isPrint If the answer of the query should be printed
-     * @returns {Promise<{P: unknown[], R: ID[]}|unknown[]|{P: [], R: []}>}
-     */
-    // TODO: Possible post-retrieve: Reordering based on Diversity, Putting the best document at the beginning and end of the context window
     async retrieveMemories(query, isBoth=false, alpha=0.5, beta=1, numNeeded=20, isIDOnly=true, isPrint=true) {
         if (isBoth) {
-            // Get the top Rs and Ps
             const topR = await this.vectorStoreR.query({
                 nResults: numNeeded/2,
                 queryTexts: [query],
@@ -560,13 +457,11 @@ class MemoryStream {
 
             const topRIDs = topR.ids[0];
 
-            // Convert them into array of memories
             let topRMemories = [];
             for (let i = 0; i < topRIDs.length; i++) {
                 topRIDs[i] = parseInt(topRIDs[i]);
                 topRMemories.push(this.memories[topRIDs[i]]);
             }
-
 
             const topPMap = new Map(Array.from(this.preferenceOrder).slice(0, numNeeded/2));
             const topPIDs = Array.from(topPMap.keys());
@@ -576,13 +471,11 @@ class MemoryStream {
                 topPMemories.push(this.memories[id]);
             }
 
-            // Out put the top numNeeded / 2 retrieve memories from both measures
             if (isPrint){
                 sendMessage(this.socket, `${BOT_LOG_MSG} Memories Retrieved by "${query}":\n\t${topRIDs}\nThe R values are: ${topR.distances[0]}`);
                 sendMessage(this.socket, `${BOT_LOG_MSG} Memories Retrieved by Preference: ${topPIDs}\nThe P values are: ${topP_PValues}`);
             }
 
-            // Return memories from both measures
             if (isIDOnly) return {
                 R: topRIDs,
                 P: topPIDs,
@@ -596,7 +489,6 @@ class MemoryStream {
 
         let UValueMap = new Map();
 
-        // Get the top Rs and Ps
         const topR = await this.vectorStoreR.query({
             nResults: numNeeded,
             queryTexts: [query],
@@ -606,15 +498,12 @@ class MemoryStream {
         const topRIDs = topR.ids[0];
         const topR_RValues = topR.distances[0];
 
-        // Convert them into array of memories, calculate the U values of relevant memory
-        // let topRMemories = [];
         const topR_PValues = [];
         const topR_UValues = [];
         for (let i = 0; i < topRIDs.length; i++) {
             topRIDs[i] = parseInt(topRIDs[i]);
             let id = topRIDs[i];
             let memory = this.memories[id];
-            // topRMemories.push(memory);
 
             let R = topR_RValues[i];
             let P = memory.preference;
@@ -630,7 +519,6 @@ class MemoryStream {
         const topPMemories = [];
         const topP_PValues = Array.from(topPMap.values());
 
-        // Remove the repeated ids in PIDs to save time calculating Rs of P memories
         for (let id of topPIDs) {
             if (topRIDs.includes(id)) {
                 const index = topPIDs.indexOf(id);
@@ -638,7 +526,6 @@ class MemoryStream {
             }
         }
 
-        // Calculate the U values of each preferred memory
         const topP_RValues = await this.getRelevanceValues(topPIDs, query);
         const topP_UValues = [];
         for (let i = 0; i < topPIDs.length; i++) {
@@ -655,29 +542,20 @@ class MemoryStream {
             topP_UValues.push(U);
         }
 
-        // Get the first 10 Usability value
         UValueMap = new Map([...UValueMap.entries()].sort((a, b) => a[1] - b[1]));
         const topUMap = new Map(Array.from(UValueMap).slice(0, numNeeded));
         const topUIDs = Array.from(topUMap.keys());
         const topUMemories = Array.from(topUMap.entries());
 
-        // Out put the top numNeeded retrieve memories from both measures
         if (isPrint){
             sendMessage(this.socket,`${BOT_LOG_MSG} Memories Retrieved by \n\t"${query}":\n\t${topRIDs}\nThe R values are: ${topR_RValues}\nThe P values are: ${topR_PValues}\nThe U values are: ${topR_UValues}`);
-
             sendMessage(this.socket, `${BOT_LOG_MSG} Memories Retrieved by Preference: ${topPIDs}\nThe R values are: ${topP_RValues}\nThe P values are: ${topP_PValues}\nThe U values are: ${topP_UValues}`);
         }
 
-        // Return memories
         if (isIDOnly) return topUIDs;
         return topUMemories;
     }
 
-    /**
-     * Retrieve the past recent memories
-     * @param numNeeded The number of memories needed; Default 5
-     * @returns {Promise<[]>} The list of the past recent memories
-     */
     async retrievePastRecentMemories(numNeeded=5) {
         let memories = this.sequenceEvent.slice(-numNeeded);
         let results = [];
@@ -689,12 +567,6 @@ class MemoryStream {
         return results;
     }
 
-    /**
-     * Get the Relevance values of an array of memory ids
-     * @param ids The memory ids asking for R values
-     * @param query The query for calculating R values
-     * @returns {Promise<[]>}
-     */
     async getRelevanceValues(ids, query){
         let RValues = [];
 
@@ -713,12 +585,6 @@ class MemoryStream {
         return RValues;
     }
 
-    /**
-     * Get the preference value of the memory
-     * @param {int} id The id of the memory to be calculated
-     * @param {String} analysis The analysis of the memory
-     */
-    // FIXME: Better to directly calculate using functions instead of vectorDB; tried but got different values (imprecise)
     async getPreferenceValue(id, analysis) {
         if (analysis) analysis = analysis.replaceAll('\n', '');
         let m = id.toString();
@@ -734,9 +600,6 @@ class MemoryStream {
         return relRes.distances[0][0];
     }
 
-    /**
-     * Clear the latest bad plans
-     */
     clearLatestBadPlans() {
         this.latestBadPlans = [];
     }
@@ -748,7 +611,6 @@ class MemoryStream {
     async clean() {
         await this.client.deleteCollection({name: `${this.persona}_memory_collection_${this.collectionName}`});
     }
-
 }
 
 module.exports = {

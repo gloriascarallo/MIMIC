@@ -20,7 +20,7 @@ const BOT_LOG_MSG = "bridge.agentClient:log";
 
 // Configurazione
 const PERSONALITY = config.MIMIC_PERSONALITY;
-const COLLECTION_NAME = "Example";
+const COLLECTION_NAME = "Run1";
 const IS_INHERIT = config.IS_CONTINUE;
 const TIMEOUT = 10 * 60000;
 const DURATION = 60000 * 60 * 24;
@@ -35,6 +35,11 @@ let recentTurnsBuffer = [];
 let currentTurn = 0;
 let isBottomUp = true;
 let dCounter = 0;
+
+// Variabili per la memoria spaziale (Scia di briciole)
+let visitedTiles = new Set();
+let currentDepth = -1;
+// ----------------------------------------------------------------------
 
 const SKILL_ROOT_PATH = `./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/skill_library/skill_${COLLECTION_NAME}/`;
 const MEMORY_ROOT_PATH = `./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/memory_system/${COLLECTION_NAME}/`;
@@ -75,9 +80,26 @@ socket.onmessage = async function (event) {
 
         while (socket.readyState === WebSocket.OPEN && Date.now() - startTime < DURATION) {
 
-
             const status = await getStatus(socket);
             if (!status) continue;
+
+            //  Logica di aggiornamento delle caselle visitate
+            if (status["hero position in xy"] && status.depth !== undefined) {
+                // Se cambiamo livello del dungeon, svuotiamo la memoria spaziale
+                if (status.depth !== currentDepth) {
+                    visitedTiles.clear();
+                    currentDepth = status.depth;
+                    console.log(`${BOT_LOG_MSG} Nuovo livello raggiunto: Profondità ${currentDepth}. Memoria spaziale resettata.`);
+                }
+
+                // Aggiungiamo la coordinata attuale formattata (es: "[16, 33]")
+                const posStr = `[${status["hero position in xy"].join(", ")}]`;
+                visitedTiles.add(posStr);
+
+                // Iniettiamo le ultime 15 posizioni direttamente nello status
+                status.visitedTilesList = Array.from(visitedTiles).slice(-15);
+            }
+            // ----------------------------------------------------------------
 
             let result = null;
 

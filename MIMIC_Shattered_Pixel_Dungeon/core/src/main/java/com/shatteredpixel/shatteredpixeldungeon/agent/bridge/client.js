@@ -1,5 +1,10 @@
 const {sendMessage} = require("./sendMessage");
 
+// La memoria spaziale vive qui, al sicuro dai refresh
+let visitedTiles = new Set();
+let currentDepth = -1;
+// -----------------------------------------------------------------------
+
 /**
  * Get the status of the bot
  */
@@ -52,10 +57,7 @@ async function actAndFeedback(socket, plan) {
 }
 
 /**
- * Ottimizza e filtra lo stato per risparmiare token (Anti-429)
- */
-/**
- * Convert the status to a prompt - Versione Robust (Anti-Crash)
+ * Convert the status to a prompt - Versione Robust (Anti-Crash & Anti-Loop)
  */
 function status2Prompt(status, prefix="") {
     if (!status) return "Nessuno stato disponibile.";
@@ -67,24 +69,38 @@ function status2Prompt(status, prefix="") {
         return value;
     };
 
+    // ---> NOVITÀ: Aggiorniamo la memoria spaziale ogni volta che creiamo il prompt <---
+    if (status.depth !== undefined && status.heroPositionInXY) {
+        // Se scendiamo di livello, svuotiamo la memoria
+        if (status.depth !== currentDepth) {
+            visitedTiles.clear();
+            currentDepth = status.depth;
+        }
+
+        // Estraiamo la posizione (gestendo sia array che stringhe per sicurezza)
+        const posStr = Array.isArray(status.heroPositionInXY)
+            ? status.heroPositionInXY.join(", ")
+            : status.heroPositionInXY;
+
+        // Salviamo la coordinata
+        visitedTiles.add(`[${posStr}]`);
+    }
+    // ---------------------------------------------------------------------------------
+
     // Hero Status
     res += `${prefix}HP: ${status.health}/${status.maxHealth} | Lvl: ${status.level} | Pos: [${status.heroPositionInXY}]\n`;
     res += `${prefix}Gold: ${status.gold} | Depth: ${status.depth}\n`;
 
     // --- FIX PER L'INVENTARIO ---
-    // Se status.items è un oggetto, usiamo Object.values() per renderlo un array
     const rawItems = status.items || {};
     const itemsArray = Array.isArray(rawItems) ? rawItems : Object.values(rawItems);
 
     const invNames = itemsArray.map(i => {
         const keys = Object.keys(i);
-        // Filtriamo tutte le chiavi tecniche per trovare il vero nome dell'oggetto
         const technicalKeys = ["quantity", "identified", "level", "STRReq", "category", "description", "name", "price", "identifiedName"];
         const realName = keys.find(k => !technicalKeys.includes(k));
-
         return realName || i.name || "oggetto_sconosciuto";
     });
-
     res += `${prefix}Inventory: ${invNames.join(", ")}\n`;
 
     // --- FIX PER L'EQUIPAGGIAMENTO ---
@@ -95,20 +111,15 @@ function status2Prompt(status, prefix="") {
 
     // Environment filtrato (cruciale per i token)
     if (status.environment) {
-        // Gestiamo anche l'environment se fosse un oggetto
         const envArray = Array.isArray(status.environment) ? status.environment : Object.values(status.environment);
 
         const crucialEnv = envArray.filter(tile => {
             const tileStr = JSON.stringify(tile).toLowerCase();
-
-            // Nascondi le porte già aperte
             if (tileStr.includes("open_door")) {
-                return false; // Se è aperta, scartala dal radar!
+                return false;
             }
-
-            // 2. LA LISTA DI COSA PUÒ VEDERE L'IA
             return tileStr.includes("mob") ||
-                tileStr.includes("door") ||       // Prenderà "door" e "locked_door", ma non "open_door"
+                tileStr.includes("door") ||
                 tileStr.includes("chest") ||
                 tileStr.includes("trap") ||
                 tileStr.includes("stairs") ||
@@ -119,6 +130,13 @@ function status2Prompt(status, prefix="") {
         res += `${prefix}Environment (Crucial): ${JSON.stringify(crucialEnv.slice(0, 15), tokenSaver)}\n`;
     }
 
+    //  Stampiamo fisicamente la lista nel prompt finale
+    let visitedArr = Array.from(visitedTiles).slice(-15);
+    if (visitedArr.length > 0) {
+        res += `${prefix}ALREADY VISITED TILES: ${visitedArr.join(" | ")}\n`;
+    }
+    // ------------------------------------------------------------------
+
     return res;
 }
 
@@ -126,5 +144,5 @@ module.exports = {
     getStatus,
     status2Prompt,
     actAndFeedback,
-    runAndFeedback: actAndFeedback, // Spesso sono identici nel bridge
+    runAndFeedback: actAndFeedback,
 };

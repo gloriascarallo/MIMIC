@@ -13,7 +13,7 @@ CRITICAL RULES:
    - THE ULTIMATE GOAL: If you see "stairs" or "locked_stairs" in the Environment, your ONLY macro-task is to move to them using `Act [x, y]`. IGNORE "entrance to the surface".
    - DESCEND: If your current `Pos` matches the coordinates of the "stairs", you MUST `Act` on your current position coordinates to descend.
    - ADVANCED TASKS: If the room is safe, prioritize macro-tasks like "Collect all the surrounding items" or "OpenChest" to gather resources efficiently.
-   - ANTI-LOOP RULE: NEVER target or move between already visited tiles. If you just opened a door, step into the center of the room to explore it rather than returning to the previous room.
+   - ANTI-LOOP RULE: NEVER select a coordinate for movement if it is listed in the "ALREADY VISITED TILES" list. If all visible doors are already in the visited list, you MUST prioritize exploring towards tiles marked "[is boundary]" to force map generation.
    - DOOR BREACHING: If no stairs or loot are visible, prioritize moving to tiles marked "door" or "locked_door".
    - BOUNDARIES: If no doors are visible, prioritize tiles marked "[is boundary]". NEVER move to "unreachable" tiles or repeat failed tasks.
 5. Combat: Use surprise attacks through doors. NEVER throw items at "inRange" mobs unless unarmed; use direct melee instead.
