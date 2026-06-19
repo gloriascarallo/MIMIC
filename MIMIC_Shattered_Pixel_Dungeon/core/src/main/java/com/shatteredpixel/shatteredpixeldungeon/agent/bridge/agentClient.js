@@ -16,11 +16,14 @@ const { topDownActions } = require("./topDownActions");
 const { hybridActions } = require("./hybridActions");
 const { performPeriodicReflection } = require("../bot_action/summarize");
 
+// Importazione del modulo per le metriche di valutazione
+const { EvaluationMetrics } = require("./EvaluationMetrics");
+
 const BOT_LOG_MSG = "bridge.agentClient:log";
 
 // Configurazione
 const PERSONALITY = config.MIMIC_PERSONALITY;
-const COLLECTION_NAME = "Run1";
+const COLLECTION_NAME = "Run8";
 const IS_INHERIT = config.IS_CONTINUE;
 const TIMEOUT = 10 * 60000;
 const DURATION = 60000 * 60 * 24;
@@ -49,6 +52,10 @@ const socket = new WebSocket(`ws://localhost:${config.PORT}`);
 
 const skillManager = new SkillManager(socket, SKILL_ROOT_PATH, COLLECTION_NAME, PERSONALITY, IS_INHERIT);
 const memoryStream = new MemoryStream(socket, MEMORY_ROOT_PATH, COLLECTION_NAME, PERSONALITY, IS_INHERIT);
+
+// NUOVO BLOCCO: Inizializzazione del calcolatore di metriche
+// Inseriamo 11300000 come combinazioni stimate per SPD dal paper e 2000 come limite arbitrario di caselle di un livello
+const metrics = new EvaluationMetrics(11300000, 2000);
 
 let startTime;
 
@@ -96,6 +103,9 @@ socket.onmessage = async function (event) {
                 const posStr = `[${status["hero position in xy"].join(", ")}]`;
                 visitedTiles.add(posStr);
 
+                // NUOVA RIGA: Registriamo la coordinata visitata nel calcolatore delle metriche
+                metrics.recordLocation(posStr);
+
                 // Iniettiamo le ultime 15 posizioni direttamente nello status
                 status.visitedTilesList = Array.from(visitedTiles).slice(-15);
             }
@@ -119,6 +129,16 @@ socket.onmessage = async function (event) {
 
             if (result && result.memoryUpdate && result.nextAction) {
                 currentTurn++;
+
+                // Registriamo l'azione pianificata per le metriche combinatorie e l'entropia
+                metrics.recordInteraction(
+                    result.nextAction.action || "wait",
+                    String(result.nextAction.tile || "null"), // Converte eventuali array in stringhe per usarle come 'subjectItem'
+                    result.nextAction.item1 || "null",
+                    false, // isCarryingItem: lasciato a false, da personalizzare se il bot usa l'inventario
+                    false  // hasUpgrade: lasciato a false
+                );
+
                 const statusString = status2Prompt(status);
 
                 await memoryStream.addMemory(
@@ -149,13 +169,17 @@ socket.onmessage = async function (event) {
 
                 if (recentTurnsBuffer.length >= 20) {
                     console.log(">>> RIFLESSIONE IN CORSO...");
+
+                    // Stampiamo a schermo le metriche calcolate finora
+                    metrics.printMetrics();
+
                     await performPeriodicReflection(socket, recentTurnsBuffer, PERSONALITY);
                     recentTurnsBuffer = [];
                 }
             }
             // --- RALLENTIAMO IL BOT ---
-            // Aspetta 25 secondi tra un turno e l'altro per evitare il ban delle API (Errore 429)
-            await sleep(25000);
+            // Aspetta 1 secondo tra un turno e l'altro per evitare il ban delle API (Errore 429)
+            await sleep(1000);
         }
     }
 };
