@@ -126,7 +126,6 @@ dependencies {
     implementation "com.badlogicgames.gdx:gdx-freetype-platform:$gdxVersion:natives-desktop"
     implementation "com.badlogicgames.gdx-controllers:gdx-controllers-desktop:$gdxControllersVersion"
 
-    //we use LWJGL tinyFD directly to display crash messages
     implementation "org.lwjgl:lwjgl-tinyfd:3.3.3"
     implementation "org.lwjgl:lwjgl-tinyfd:3.3.3:natives-windows"
     implementation "org.lwjgl:lwjgl-tinyfd:3.3.3:natives-macos"
@@ -138,7 +137,12 @@ dependencies {
     implementation project(':services:news:shatteredNews')
 }
 
-// JaCoCo report configuration
+// COLLEGHIAMO JACOCO AL TASK DI GIOCO
+jacoco {
+    applyTo(tasks.named('debug').get())
+}
+
+//  PUNTIAMO AL FILE CORRETTO
 jacocoTestReport {
     dependsOn debug
 
@@ -152,9 +156,9 @@ jacocoTestReport {
     )
 
     sourceDirectories.setFrom(files("src/main/java"))
-    executionData.setFrom(
-            fileTree(dir: layout.buildDirectory, includes: ["**/*.exec"])
-    )
+
+    // Diciamo a JaCoCo dove andrà a salvare i dati del gioco
+    executionData.setFrom(layout.buildDirectory.file("jacoco/debug.exec"))
 }
 
 jacocoTestCoverageVerification {
