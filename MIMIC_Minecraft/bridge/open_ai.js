@@ -49,7 +49,7 @@ async function callOpenAI(context, input, LogMsg,
                 model: model,
                 prompt: `${context}${EOL} ${input}${EOL}`,
                 max_tokens: 1000,
-                temperature: 0,
+                temperature: 0.5,
                 // stop: STOP_WORD,
                 n: 1,
             };

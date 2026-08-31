@@ -531,7 +531,7 @@ class MemoryStream {
         for (let i = 0; i < topPIDs.length; i++) {
             topPIDs[i] = parseInt(topPIDs[i]);
             let id = topPIDs[i];
-            let memory = this.memories[i];
+            let memory = this.memories[id];
 
             let R = topP_RValues[i];
             let P = topP_PValues[i];
@@ -594,6 +594,12 @@ class MemoryStream {
             queryTexts: [this.personaDescription],
             where: { "memoryID": m },
         });
+
+        // FIX: Controllo di sicurezza Anti-Crash per ChromaDB
+        if (!relRes.distances || !relRes.distances[0] || relRes.distances[0].length === 0) {
+            sendMessage(this.socket, `${BOT_LOG_MSG} Warning: ChromaDB non ha trovato l'ID ${m} in tempo. Assegnata preferenza neutra.`);
+            return 0.5; // Valore di fallback
+        }
 
         sendMessage(this.socket, `${BOT_LOG_MSG} id: ${id}, relResID: ${relRes.ids[0][0]}, Preference: ${relRes.distances[0][0]}`);
 

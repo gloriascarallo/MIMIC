@@ -19,7 +19,7 @@ async function hybridActions(socket, skillManager, memoryStream,
                              switchCondition="S", thresholdD=20, thresholdS=30) {
 
     let changed = false;
-    let actionPayload = null; // <--- NOVITÀ: Variabile per salvare l'azione calcolata
+    let actionPayload = null; // Variabile per salvare l'azione calcolata
 
     // 1. LOGICA DI SWITCH BASATA SULL'ESPERIENZA (S)
     // Se la memoria è sufficientemente popolata, passiamo a una visione più strategica.
@@ -36,11 +36,12 @@ async function hybridActions(socket, skillManager, memoryStream,
     if (isBottomUp) {
         // --- MODALITÀ REATTIVA ---
         let newActionObj = await bottomUpActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, TIMEOUT);
-        actionPayload = newActionObj; // <--- Salviamo il payload per agentClient
+        actionPayload = newActionObj; // Salviamo il payload per agentClient
 
-        if (newActionObj && newActionObj.task) {
+        // Leggiamo correttamente il task nidificato
+        if (newActionObj && newActionObj.nextAction && newActionObj.nextAction.task) {
             // Se l'azione è valida, aggiorniamo il contatore di stasi (cnt)
-            if (!memoryStream.hasTask(newActionObj.task)) {
+            if (!memoryStream.hasTask(newActionObj.nextAction.task)) {
                 cnt = 0;
             } else {
                 cnt += 1;
@@ -49,14 +50,12 @@ async function hybridActions(socket, skillManager, memoryStream,
 
     } else {
         // --- MODALITÀ STRATEGICA ---
-        // topDownActions in MIMIC 2.0 restituisce un array [actionObj]
-        let subTasks = await topDownActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, SKILL_ROOT_PATH, TIMEOUT);
+        let subTask = await topDownActions(socket, skillManager, memoryStream, PERSONALITY, RETRIEVE_IS_BOTH, SKILL_ROOT_PATH, TIMEOUT);
 
-        if (subTasks && subTasks.length > 0) {
-            const subTask = subTasks[0]; // Prendiamo la singola azione atomica
-            actionPayload = subTask; // <--- Salviamo il payload per agentClient
+        if (subTask && subTask.nextAction) {
+            actionPayload = subTask; // Salviamo il payload per agentClient
 
-            let taskString = subTask.task || "";
+            let taskString = subTask.nextAction.task || "";
 
             if (taskString) {
                 if (!memoryStream.hasTask(taskString)) {
@@ -85,7 +84,7 @@ async function hybridActions(socket, skillManager, memoryStream,
     return {
         isBottomUp: isBottomUp,
         cnt: cnt,
-        ...(actionPayload || {}) // <--- NOVITÀ: Questo trasferisce magicamente l'azione e la memoria ad agentClient.js!
+        ...(actionPayload || {}) // Questo trasferisce l'azione e la memoria ad agentClient.js
     };
 }
 

@@ -26,7 +26,7 @@ async function getStatus(socket) {
 
         let timeout = setTimeout(() => {
             socket.removeEventListener('message', handler);
-            sendMessage(socket, "GetStatus");
+            resolve({ msgType: "error", error: "Timeout GetStatus 20s" });
         }, 20000);
     });
 }
@@ -51,7 +51,7 @@ async function actAndFeedback(socket, plan) {
 
         let timeout = setTimeout(() => {
             socket.removeEventListener('message', handler);
-            sendMessage(socket, `ACTION: ${JSON.stringify(plan)}`);
+            resolve({ msgType: "error", errors: "Timeout actAndFeedback 20s", logs: "" });
         }, 20000);
     });
 }
@@ -70,7 +70,7 @@ function status2Prompt(status, prefix="") {
     };
 
     // ---> NOVITÀ: Aggiorniamo la memoria spaziale ogni volta che creiamo il prompt <---
-    if (status.depth !== undefined && status.heroPositionInXY) {
+    if (status.depth !== undefined && status["hero position in xy"]) {
         // Se scendiamo di livello, svuotiamo la memoria
         if (status.depth !== currentDepth) {
             visitedTiles.clear();
@@ -78,9 +78,9 @@ function status2Prompt(status, prefix="") {
         }
 
         // Estraiamo la posizione (gestendo sia array che stringhe per sicurezza)
-        const posStr = Array.isArray(status.heroPositionInXY)
-            ? status.heroPositionInXY.join(", ")
-            : status.heroPositionInXY;
+        const posStr = Array.isArray(status["hero position in xy"])
+            ? status["hero position in xy"].join(", ")
+            : status["hero position in xy"];
 
         // Salviamo la coordinata
         visitedTiles.add(`[${posStr}]`);
@@ -88,7 +88,7 @@ function status2Prompt(status, prefix="") {
     // ---------------------------------------------------------------------------------
 
     // Hero Status
-    res += `${prefix}HP: ${status.health}/${status.maxHealth} | Lvl: ${status.level} | Pos: [${status.heroPositionInXY}]\n`;
+    res += `${prefix}HP: ${status.health}/${status.maxHealth} | Lvl: ${status.level} | Pos: [${status["hero position in xy"]}]\n`;
     res += `${prefix}Gold: ${status.gold} | Depth: ${status.depth}\n`;
 
     // --- FIX PER L'INVENTARIO ---
@@ -124,10 +124,13 @@ function status2Prompt(status, prefix="") {
                 tileStr.includes("trap") ||
                 tileStr.includes("stairs") ||
                 tileStr.includes("locked_stairs") ||
-                tileStr.includes("guerriero");
+                tileStr.includes("guerriero") ||
+                tileStr.includes("boundary") ||
+                tileStr.includes("empty_space") || // Vede dove camminare
+                tileStr.includes("floor");         // Vede dove camminare
         });
 
-        res += `${prefix}Environment (Crucial): ${JSON.stringify(crucialEnv.slice(0, 15), tokenSaver)}\n`;
+        res += `${prefix}Environment (Crucial): ${JSON.stringify(crucialEnv.slice(0, 40), tokenSaver)}\n`;
     }
 
     //  Stampiamo fisicamente la lista nel prompt finale

@@ -8,15 +8,15 @@ Based on this, choose the SINGLE best NEXT MACRO-TASK.
 CRITICAL RULES:
 1. Act as a professional player reflecting the given personality.
 2. Output strictly ONE action per turn in the precise JSON format requested.
-3. Allowed actions ONLY: "act", "wait", "equip", "unequip", "drop", "use", "throw", "upgrade", "Collect", "OpenChest".
+3. Allowed actions ONLY: "act", "wait", "equip", "unequip", "drop", "use", "throw", "upgrade".
 4. CRITICAL EXPLORATION & MACRO-TASK HIERARCHY (EVALUATE IN EXACT ORDER):
    - THE ULTIMATE GOAL: If you see "stairs" or "locked_stairs" in the Environment, your ONLY macro-task is to move to them using `Act [x, y]`. IGNORE "entrance to the surface".
    - DESCEND: If your current `Pos` matches the coordinates of the "stairs", you MUST `Act` on your current position coordinates to descend.
-   - ADVANCED TASKS: If the room is safe, prioritize macro-tasks like "Collect all the surrounding items" or "OpenChest" to gather resources efficiently.
+   - ADVANCED TASKS: If the room is safe, prioritize gathering resources or opening chests by using the "act" action on their specific coordinates.
    - ANTI-LOOP RULE: NEVER select a coordinate for movement if it is listed in the "ALREADY VISITED TILES" list. If all visible doors are already in the visited list, you MUST prioritize exploring towards tiles marked "[is boundary]" to force map generation.
-   - DOOR BREACHING: If no stairs or loot are visible, prioritize moving to tiles marked "door" or "locked_door".
-   - BOUNDARIES: If no doors are visible, prioritize tiles marked "[is boundary]". NEVER move to "unreachable" tiles or repeat failed tasks.
-5. Combat: Use surprise attacks through doors. NEVER throw items at "inRange" mobs unless unarmed; use direct melee instead.
+   - DOOR BREACHING: If no stairs or loot are visible, prioritize moving to tiles marked "door" or "locked_door" using "act".
+   - BOUNDARIES: If no doors are visible, you must move TOWARDS tiles marked "[is boundary]". NEVER use 'act' on the boundary tile itself (which is a wall). Instead, use 'act' on the closest walkable "empty_space" or "floor" tile next to the boundary. NEVER move to "unreachable" tiles or repeat failed tasks.
+5. Combat: Use surprise attacks through doors. NEVER throw items at "inRange" mobs unless unarmed; use direct melee ("act" on the mob's tile) instead.
 6. Survival: Eat ONLY when "starving". If safe, wait up to 10 turns to regenerate health. ALWAYS prioritize spending free talent points.
 7. Inventory: Unidentified items must be identified with a "scroll_of_identify" before use.
 8. Rejected Tasks: NEVER propose tasks listed in 'Past rejected tasks'. Read their critiques to improve.
@@ -36,8 +36,8 @@ CRITICAL RULES FOR EVALUATION AND PLANNING:
     },
     "next_action": {
         "reasoning": "Brief explanation of why you chose your NEXT MACRO-TASK based on your personality and current state.",
-        "task": "A short description like 'Act [x, y]' or 'Collect all the surrounding items'",
-        "action": "Must be one of the allowed actions (act, wait, equip, unequip, drop, use, throw, upgrade, Collect, OpenChest)",
+        "task": "A short description like 'Act [x, y]' or 'Loot the chest at [x, y]'",
+        "action": "Must be one of the allowed actions (act, wait, equip, unequip, drop, use, throw, upgrade)",
         "tile": "[x, y] or 'null'",
         "item1": "Item name or 'null'",
         "item2": "Target item name or 'null'",
@@ -51,13 +51,13 @@ EXAMPLES:
     "memory_update": {
         "success": true,
         "critique": "null",
-        "subjective_analysis": "The previous macro-task was completed successfully. I am making good progress."
+        "subjective_analysis": "The previous movement was successful. Exploring new tiles satisfies my need for progression."
     },
     "next_action": {
-        "reasoning": "I want to explore the map and find the stairs. Tile [6, 8] is an unexplored boundary.",
-        "task": "Act [6, 8]",
+        "reasoning": "I need to explore. Tile [6, 8] is a boundary, so I will move to the walkable floor at [6, 7] right next to it.",
+        "task": "Act [6, 7]",
         "action": "act",
-        "tile": [6, 8],
+        "tile": [6, 7],
         "item1": "null",
         "item2": "null",
         "waitTurns": "-1"
@@ -71,11 +71,11 @@ EXAMPLES:
         "subjective_analysis": "I found a room full of loot. Collecting it aligns perfectly with my goals."
     },
     "next_action": {
-        "reasoning": "There are a lot of items around me, and I should collect all the surrounding items.",
-        "task": "Collect all the surrounding items",
-        "action": "Collect",
-        "tile": "null",
-        "item1": "all_the_surrounding_items",
+        "reasoning": "There is a health potion at [4, 5]. I will move there to collect it.",
+        "task": "Move to [4, 5] to collect the item",
+        "action": "act",
+        "tile": [4, 5],
+        "item1": "null",
         "item2": "null",
         "waitTurns": "-1"
     }
@@ -84,17 +84,17 @@ EXAMPLES:
 {
     "memory_update": {
         "success": false,
-        "critique": "I couldn't open the chest because I don't have the required key yet. I need to find it first.",
-        "subjective_analysis": "It's frustrating to be blocked by a lock, but finding the key will be rewarding."
+        "critique": "I walked into a wall. I must prioritize tiles marked '[is boundary]'.",
+        "subjective_analysis": "That was a waste of time. I need to be more efficient to achieve my goals."
     },
     "next_action": {
-        "reasoning": "I want to open the chest on tile [6, 8] and collect the item inside. I need to find the key.",
-        "task": "Collect a key and open the chest on tile [6, 8]",
-        "action": "OpenChest",
-        "tile": [6, 8],
-        "item1": "chest",
-        "item2": "key",
-        "waitTurns": "-1"
+        "reasoning": "I am safe but injured. I will wait to trigger health regeneration.",
+        "task": "Wait 10",
+        "action": "wait",
+        "tile": "null",
+        "item1": "null",
+        "item2": "null",
+        "waitTurns": "10"
     }
 }
 

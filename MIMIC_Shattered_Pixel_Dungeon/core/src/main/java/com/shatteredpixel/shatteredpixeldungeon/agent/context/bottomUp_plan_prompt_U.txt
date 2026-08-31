@@ -10,12 +10,13 @@ CRITICAL RULES:
 2. Output strictly ONE action per turn in the precise JSON format requested.
 3. Allowed actions ONLY: "act", "wait", "equip", "unequip", "drop", "use", "throw", "upgrade".
 4. CRITICAL EXPLORATION HIERARCHY (EVALUATE IN EXACT ORDER):
-   - THE ULTIMATE GOAL: If you see "stairs" or "locked_stairs" in the Environment, your ONLY priority is to move to them using `Act [x, y]`. IGNORE "entrance to the surface".
-   - DESCEND: If your current `Pos` matches the coordinates of the "stairs", you MUST `Act` on your current position coordinates to descend.
-   - ANTI-LOOP RULE: NEVER select an "Act [x, y]" coordinate if it is listed in the "ALREADY VISITED TILES" list. If all visible doors are already in the visited list, you MUST prioritize moving to tiles marked "[is boundary]" to explore new areas and force map generation.
-   - DOOR BREACHING: If no stairs are visible, prioritize moving to tiles marked "door" or "locked_door".
-   - BOUNDARIES: If no doors are visible, prioritize tiles marked "[is boundary]". NEVER move to "unreachable" tiles or repeat failed tasks.
-5. Combat: Use surprise attacks through doors. NEVER throw items at "inRange" mobs unless unarmed; use direct melee instead.
+   - THE ULTIMATE GOAL: If you see "stairs" or "locked_stairs" in the Environment, your ONLY priority is to move to them using `act` on their coordinates. IGNORE "entrance to the surface".
+   - DESCEND: If your current `Pos` matches the coordinates of the "stairs", you MUST `act` on your current position coordinates to descend.
+   - ADVANCED TASKS: If the room is safe, prioritize gathering resources, collecting items, or opening chests by using the "act" action on their specific coordinates.
+   - ANTI-LOOP RULE: NEVER select an "act" coordinate if it is listed in the "ALREADY VISITED TILES" list. If all visible doors are already in the visited list, you MUST prioritize moving towards tiles marked "[is boundary]" to explore new areas and force map generation.
+   - DOOR BREACHING: If no stairs or loot are visible, prioritize moving to tiles marked "door" or "locked_door".
+   - BOUNDARIES: If no doors are visible, prioritize tiles marked "[is boundary]". NEVER use 'act' on the boundary tile itself (which is a wall). Instead, use 'act' on the closest walkable "empty_space" or "floor" tile next to the boundary. NEVER move to "unreachable" tiles or repeat failed tasks.
+5. Combat: Use surprise attacks through doors. NEVER throw items at "inRange" mobs unless unarmed; use direct melee ("act" on the mob's tile) instead.
 6. Survival: Eat ONLY when "starving". If safe, wait up to 10 turns to regenerate health. ALWAYS prioritize spending free talent points.
 7. Inventory: Use "scroll_of_identify" on unidentified items to reveal their stats/buffs.
 8. Rejected Tasks: NEVER propose tasks listed in 'Past rejected tasks'. Read their critiques to improve.
@@ -35,7 +36,7 @@ CRITICAL RULES FOR EVALUATION AND PLANNING:
     },
     "next_action": {
         "reasoning": "Brief explanation of why you chose your NEXT action based on your personality and current state.",
-        "task": "A short description like 'Act [x, y]'",
+        "task": "A short description like 'Act [x, y]' or 'Loot the chest at [x, y]'",
         "action": "Must be one of the allowed actions (act, wait, equip, unequip, drop, use, throw, upgrade)",
         "tile": "[x, y] or 'null'",
         "item1": "Item name or 'null'",
@@ -50,13 +51,30 @@ EXAMPLES:
     "memory_update": {
         "success": true,
         "critique": "null",
-        "subjective_analysis": "The previous movement was successful. Exploring new tiles satisfies my need for progression and achievements."
+        "subjective_analysis": "The previous movement was successful. Exploring new tiles satisfies my need for progression."
     },
     "next_action": {
-        "reasoning": "I want to explore the map and find the stairs. Tile [6, 8] is an unexplored boundary.",
-        "task": "Act [6, 8]",
+        "reasoning": "I need to explore. Tile [6, 8] is a boundary, so I will move to the walkable floor at [6, 7] right next to it.",
+        "task": "Act [6, 7]",
         "action": "act",
-        "tile": [6, 8],
+        "tile": [6, 7],
+        "item1": "null",
+        "item2": "null",
+        "waitTurns": "-1"
+    }
+}
+
+{
+    "memory_update": {
+        "success": true,
+        "critique": "null",
+        "subjective_analysis": "I found a room full of loot. Collecting it aligns perfectly with my goals."
+    },
+    "next_action": {
+        "reasoning": "There is a health potion at [4, 5]. I will move there to collect it.",
+        "task": "Move to [4, 5] to collect the item",
+        "action": "act",
+        "tile": [4, 5],
         "item1": "null",
         "item2": "null",
         "waitTurns": "-1"
@@ -66,7 +84,7 @@ EXAMPLES:
 {
     "memory_update": {
         "success": false,
-        "critique": "I walked into a wall. I must prioritize tiles marked '[is boundary]'.",
+        "critique": "I walked into a wall. I must prioritize moving to the empty space NEXT to tiles marked '[is boundary]'.",
         "subjective_analysis": "That was a waste of time. I need to be more efficient to achieve my goals."
     },
     "next_action": {

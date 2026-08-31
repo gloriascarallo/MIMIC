@@ -1,5 +1,5 @@
 // [AGGIORNATO - MIMIC 2.0 Resilience Edition]
-// Gestione ottimizzata dell'environment e dei tempi di attesa per Gemini Free Tier.
+// Gestione ottimizzata dell'environment, memoria causale allineata e protezione Rate Limit.
 
 const { plan } = require("../bot_action/plan");
 const { getStatus, actAndFeedback } = require("./client");
@@ -11,10 +11,15 @@ const BOT_ERR_MSG = "bridge.bottomUpActions:error";
 // Funzione per mettere in pausa il bot (stabilità API e sincronizzazione)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Variabili globali per la continuità turn-by-turn
+// Variabili globali per la continuità turn-by-turn e memoria causale
 let lastTaskDone = null;
+let lastActionDone = null;
+let lastTileDone = null;
+let lastItem1Done = null;
+let lastItem2Done = null;
 let lastFeedbackRcvd = null;
 let lastStatusRcvd = null;
+let localBadPlans = []; // Memoria errori locale anti-loop
 
 /**
  * Esegue le azioni reattive (Bottom-Up) del bot.
@@ -32,56 +37,19 @@ async function bottomUpActions(socket, skillManager, memoryStream,
 
     if (!currentStatus) return null;
 
-    // --- FILTRO ULTRA-RESILIENTE  ---
-    if (currentStatus.environment && Array.isArray(currentStatus.environment)) {
-        const heroPos = currentStatus["hero position in xy"];
-
-        // Controllo di sicurezza: l'eroe ha una posizione valida?
-        if (heroPos && Array.isArray(heroPos) && heroPos.length >= 2) {
-            currentStatus.environment = currentStatus.environment.filter(item => {
-                try {
-                    // Estraiamo tutti i valori dell'oggetto (es: [ [14, 13] ])
-                    const values = Object.values(item);
-                    if (values.length === 0) return false;
-
-                    // Cerchiamo attivamente l'array che contiene le coordinate [x, y]
-                    const coords = values.find(v => Array.isArray(v) && v.length >= 2);
-
-                    if (coords) {
-                        // ... dentro il tuo filtro raggio 8 ...
-                        const dx = Math.abs(coords[0] - heroPos[0]);
-                        const dy = Math.abs(coords[1] - heroPos[1]);
-
-// Se l'oggetto è la scala, tienilo in memoria SEMPRE, anche a distanza 50!
-                        const itemStr = JSON.stringify(item).toLowerCase();
-                        if (itemStr.includes("stairs") || itemStr.includes("locked_stairs")) {
-                            return true;
-                        }
-
-// Per tutto il resto (mostri, erba, pozioni), applica il taglio del raggio 8
-                        return dx <= 8 && dy <= 8;
-                    }
-                } catch (e) {
-                    return false; // Se il tile è strano, lo scartiamo e non crashiamo
-                }
-                return false;
-            });
-        }
-    }
-
-    sendMessage(socket, `${BOT_LOG_MSG} Stato acquisito (Environment ottimizzato a raggio 8).`);
+    sendMessage(socket, `${BOT_LOG_MSG} Stato acquisito (Environment gestito dal client).`);
 
     // 2. CHIAMATA AL MEGA-PROMPT (Architettura Single-Shot)
     const megaPlan = await plan(
         socket, memoryStream, currentStatus, PERSONALITY,
-        [], // Bad plans svuotati: gestiti dal feedback turn-by-turn
+        localBadPlans,
         lastTaskDone, lastFeedbackRcvd,
         RETRIEVE_IS_BOTH, "bottomUp"
     );
 
     // Se l'API restituisce un errore (Quota Exceeded 429 o Service Unavailable 503)
     if (!megaPlan || !megaPlan.nextAction) {
-        const cooldown = 40000; // 40 secondi di attesa forzata
+        const cooldown = 40000;
         sendMessage(socket, `${BOT_ERR_MSG} API Busy o Quota esaurita. Pausa di ${cooldown/1000}s...`);
         await sleep(cooldown);
         return null;
@@ -90,7 +58,7 @@ async function bottomUpActions(socket, skillManager, memoryStream,
     const nextAction = megaPlan.nextAction;
     const memoryUpdate = megaPlan.memoryUpdate;
 
-    // 3. AGGIORNAMENTO MEMORIA SOGGETTIVA
+    // 3. AGGIORNAMENTO MEMORIA SOGGETTIVA (Allineamento Causale)
     if (lastTaskDone && memoryUpdate && lastStatusRcvd) {
         const isError = lastFeedbackRcvd && (lastFeedbackRcvd.includes("Error") || lastFeedbackRcvd.includes("no path"));
         const memoryType = isError ? "error" : "event";
@@ -103,10 +71,10 @@ async function bottomUpActions(socket, skillManager, memoryStream,
             0,
             Date.now(),
             lastTaskDone,
-            nextAction.action,
-            JSON.stringify(nextAction.tile),
-            nextAction.item1 || "null",
-            nextAction.item2 || "null",
+            lastActionDone, // Azione che ha causato il risultato
+            lastTileDone,   // Tile puntato nel turno precedente
+            lastItem1Done,  // Item 1 del turno precedente
+            lastItem2Done,  // Item 2 del turno precedente
             JSON.stringify(lastStatusRcvd),
             memoryUpdate.reasoning,
             "", "", "", "",
@@ -125,23 +93,41 @@ async function bottomUpActions(socket, skillManager, memoryStream,
 
     sendMessage(socket, `${BOT_LOG_MSG} Feedback ricevuto dal server.`);
 
-    // 5. PREPARAZIONE PER IL TURNO SUCCESSIVO
+    // 5. PREPARAZIONE PER IL TURNO SUCCESSIVO (Salvataggio dati attuali)
     lastTaskDone = nextAction.task;
+    lastActionDone = nextAction.action || "";
+    lastTileDone = JSON.stringify(nextAction.tile || []);
+    lastItem1Done = nextAction.item1 || "null";
+    lastItem2Done = nextAction.item2 || "null";
+
     lastFeedbackRcvd = (feedback.errors && feedback.errors !== "") ? feedback.errors : feedback.logs;
     lastStatusRcvd = currentStatus;
 
+    // --- SALVATAGGIO DEI BAD PLANS ---
+    if (feedback.errors && feedback.errors !== "") {
+        localBadPlans.push({
+            badPlanSummary: () => `Task: '${nextAction.task}' failed because: ${feedback.errors}`
+        });
+
+        if (localBadPlans.length > 3) {
+            localBadPlans.shift();
+        }
+    } else {
+        localBadPlans = [];
+    }
+
     // --- GESTIONE DINAMICA DEL RITMO (PROTEZIONE QUOTA) ---
-    let finalSleep = 6000; // Default 6 secondi (ideale per 10-15 RPM)
+    let finalSleep = 6000;
 
     if (lastFeedbackRcvd.includes("429") || lastFeedbackRcvd.includes("Quota")) {
-        finalSleep = 45000; // Se rileviamo un limite raggiunto, ci fermiamo per 45s
+        finalSleep = 45000;
         sendMessage(socket, `${BOT_LOG_MSG} [RATE LIMIT] Cooldown lungo attivato.`);
     }
 
     sendMessage(socket, `${BOT_LOG_MSG} Turno finito. Attesa: ${finalSleep/1000}s`);
     await sleep(finalSleep);
 
-    return nextAction;
+    return megaPlan;
 }
 
 module.exports = {
