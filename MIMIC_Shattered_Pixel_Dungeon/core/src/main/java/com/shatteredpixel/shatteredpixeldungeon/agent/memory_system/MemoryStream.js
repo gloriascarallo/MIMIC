@@ -173,6 +173,7 @@ class MemoryStream {
 
         // Connessione DIRETTA e GRATUITA ai server di Google per la memoria
         // Embedder personalizzato e RESILIENTE (Anti-Crash)
+        // Embedder 100% LOCALE tramite LM Studio / API compatibili OpenAI
         this.embedder = {
             generate: async (texts) => {
                 let results = [];
@@ -182,35 +183,38 @@ class MemoryStream {
 
                     while (!success && retries > 0) {
                         try {
-                            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent?key=${process.env.GOOGLE_API_KEY}`, {
+                            const res = await fetch(`http://localhost:1234/v1/embeddings`, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
-                                    model: "models/gemini-embedding-001",
-                                    content: { parts: [{ text: text }] }
+                                    model: "local-model",
+                                    input: text
                                 })
                             });
 
                             const data = await res.json();
 
                             if (data.error) {
-                                console.log(`[MemoryStream] Server Google API occupato (${data.error.message}). Tentativi rimasti: ${retries - 1}`);
+                                console.log(`[MemoryStream] Server locale occupato o errore: ${data.error.message}. Tentativi rimasti: ${retries - 1}`);
                                 retries--;
-                                await sleep(15000);
-                            } else {
-                                results.push(data.embedding.values);
+                                await sleep(2000);
+                            } else if (data.data && data.data.length > 0) {
+                                // Estrae l'array matematico dalla risposta standard di OpenAI/LM Studio
+                                results.push(data.data[0].embedding);
                                 success = true;
-                                await sleep(5000); // <-- SICUREZZA: Allineato ai 5 secondi
+                            } else {
+                                throw new Error("Formato risposta non valido dal server locale");
                             }
                         } catch (err) {
-                            console.log(`[MemoryStream] Errore di rete: ${err.message}. Tentativi rimasti: ${retries - 1}`);
+                            console.log(`[MemoryStream] Errore di rete locale: ${err.message}. Tentativi rimasti: ${retries - 1}`);
                             retries--;
-                            await sleep(15000);
+                            await sleep(2000);
                         }
                     }
 
                     if (!success) {
-                        console.log(`[MemoryStream] Vettorizzazione fallita definitivamente. Uso un vettore neutro di salvataggio.`);
+                        console.log(`[MemoryStream] Vettorizzazione fallita. Uso un vettore neutro di salvataggio.`);
+                        // Mantiene l'array di 768 zeri per evitare il crash del database vettoriale
                         results.push(new Array(768).fill(0));
                     }
                 }
@@ -354,7 +358,7 @@ class MemoryStream {
                 memories[i].code, memories[i].skills, memories[i].critique, memories[i].errorMessage, analysis, true);
 
             sendMessage(this.socket, `${BOT_LOG_MSG} Loaded memory ${i}. Sleeping to respect rate limits...`);
-            await sleep(5000); // <-- FIX PRINCIPALE: 5 secondi per garantire < 15 richieste al minuto
+            await sleep(100);
         }
     }
 

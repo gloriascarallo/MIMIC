@@ -69,26 +69,39 @@ function status2Prompt(status, prefix="") {
         return value;
     };
 
-    // ---> NOVITÀ: Aggiorniamo la memoria spaziale ogni volta che creiamo il prompt <---
-    if (status.depth !== undefined && status["hero position in xy"]) {
-        // Se scendiamo di livello, svuotiamo la memoria
+    // --- FIX 1: TROVARE LA POSIZIONE DEL GUERRIERO ---
+    let heroPos = status["hero position in xy"];
+
+    // Se il gioco non passa la variabile, la cerchiamo noi spulciando l'ambiente!
+    if (!heroPos && status.environment) {
+        const envArray = Array.isArray(status.environment) ? status.environment : Object.values(status.environment);
+        for (let tile of envArray) {
+            let key = Object.keys(tile)[0];
+            if (key && key.toLowerCase().includes("guerriero")) {
+                heroPos = tile[key]; // Estrae le coordinate [x, y] esatte
+                break;
+            }
+        }
+    }
+
+    // Se dopo la ricerca heroPos è un array, lo uniamo in stringa per la memoria spaziale
+    let posStrForMemory = "undefined";
+    if (heroPos) {
+        posStrForMemory = Array.isArray(heroPos) ? heroPos.join(", ") : heroPos;
+    }
+
+    // ---> Aggiorniamo la memoria spaziale <---
+    if (status.depth !== undefined && posStrForMemory !== "undefined") {
         if (status.depth !== currentDepth) {
             visitedTiles.clear();
             currentDepth = status.depth;
         }
-
-        // Estraiamo la posizione (gestendo sia array che stringhe per sicurezza)
-        const posStr = Array.isArray(status["hero position in xy"])
-            ? status["hero position in xy"].join(", ")
-            : status["hero position in xy"];
-
-        // Salviamo la coordinata
-        visitedTiles.add(`[${posStr}]`);
+        visitedTiles.add(`[${posStrForMemory}]`);
     }
     // ---------------------------------------------------------------------------------
 
-    // Hero Status
-    res += `${prefix}HP: ${status.health}/${status.maxHealth} | Lvl: ${status.level} | Pos: [${status["hero position in xy"]}]\n`;
+    // Hero Status (Ora mostrerà la posizione vera al posto di undefined!)
+    res += `${prefix}HP: ${status.health}/${status.maxHealth} | Lvl: ${status.level} | Pos: [${posStrForMemory}]\n`;
     res += `${prefix}Gold: ${status.gold} | Depth: ${status.depth}\n`;
 
     // --- FIX PER L'INVENTARIO ---
@@ -118,7 +131,10 @@ function status2Prompt(status, prefix="") {
             if (tileStr.includes("open_door")) {
                 return false;
             }
-            return tileStr.includes("mob") ||
+            // FIX: Se la casella non contiene "null" significa che c'è un mostro o un oggetto!
+            const hasEntity = !tileStr.includes("null)") && !tileStr.includes("null]");
+
+            return hasEntity || // <--- Ora vedrà tutti i mostri e gli oggetti!
                 tileStr.includes("door") ||
                 tileStr.includes("chest") ||
                 tileStr.includes("trap") ||
@@ -126,20 +142,29 @@ function status2Prompt(status, prefix="") {
                 tileStr.includes("locked_stairs") ||
                 tileStr.includes("guerriero") ||
                 tileStr.includes("boundary") ||
-                tileStr.includes("empty_space") || // Vede dove camminare
-                tileStr.includes("floor");         // Vede dove camminare
+                tileStr.includes("empty_space") ||
+                tileStr.includes("floor");
         });
 
         res += `${prefix}Environment (Crucial): ${JSON.stringify(crucialEnv.slice(0, 40), tokenSaver)}\n`;
     }
 
-    //  Stampiamo fisicamente la lista nel prompt finale
+    // Stampiamo fisicamente la lista nel prompt finale
     let visitedArr = Array.from(visitedTiles).slice(-15);
     if (visitedArr.length > 0) {
         res += `${prefix}ALREADY VISITED TILES: ${visitedArr.join(" | ")}\n`;
     }
-    // ------------------------------------------------------------------
 
+    // --- FIX 2: REGOLE FERREE PER IL MODELLO (Prompt Engineering) ---
+    // Queste righe verranno lette da Llama 3.1 ad ogni turno, forzandolo a non fare errori
+    res += `\n[CRITICAL RULES FOR NEXT ACTION]:\n`;
+    res += `1. DO NOT move to your current 'Pos'. You are already there. Target a DIFFERENT walkable tile.\n`;
+    res += `2. The 'tile' parameter MUST be a JSON array of two numbers, e.g., [20, 24]. NEVER use quotes around it like "[20, 24]".\n`;
+    res += `3. COMBAT OVERRIDE: If any enemy in the Environment is marked as 'inRange', you MUST STOP EXPLORING. Your 'action' MUST be 'act', and your 'tile' MUST be the exact [x, y] coordinates of the enemy. Do not walk away or target empty spaces while an enemy is inRange.\n`;
+    // NUOVA REGOLA PER SALVARE IL JSON:
+    res += `4. STRICT JSON FORMAT: You MUST reply with EXACTLY ONE valid JSON object. Do not open a second JSON block, do not leave brackets unclosed, and do not add conversational text.\n`;
+    res += `5. EXPLORATION OVERRIDE: If you receive a 'no path' error, DO NOT target the same boundary again. Instead, look for a normal '(door, null)' in the Environment and move to its exact coordinates to explore a new room. Avoid 'locked_door' unless you hold a key.\n`;
+    res += `6. PROXIMITY OVERRIDE: Never target coordinates that are far away (where the difference between your position and the target is greater than 3 or 4 tiles). Only interact with adjacent or nearby tiles to avoid pathfinding errors.\n`;
     return res;
 }
 
