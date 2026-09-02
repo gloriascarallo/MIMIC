@@ -23,7 +23,7 @@ const BOT_LOG_MSG = "bridge.agentClient:log";
 
 // Configurazione
 const PERSONALITY = config.MIMIC_PERSONALITY;
-const COLLECTION_NAME = "Run1efficiency";
+const COLLECTION_NAME = "Run2aggression";
 const IS_INHERIT = config.IS_CONTINUE;
 const TIMEOUT = 10 * 60000;
 const DURATION = 60000 * 60 * 24;
@@ -49,6 +49,19 @@ const MEMORY_ROOT_PATH = `./core/src/main/java/com/shatteredpixel/shatteredpixel
 
 // TENTATIVO DI CONNESSIONE
 const socket = new WebSocket(`ws://localhost:${config.PORT}`);
+
+// --- AGGIUNTA PER INTERCETTARE CTRL + C ---
+process.on('SIGINT', async () => {
+    console.log("\n[SIGINT] Chiusura manuale rilevata. Invio QUIT_GAME al server Java...");
+    try {
+        sendMessage(socket, "QUIT_GAME");
+        await sleep(2000); // Dà il tempo al socket di consegnare il comando alla JVM
+    } catch (e) {
+        // Ignora se la connessione è già chiusa
+    }
+    process.exit(0);
+});
+// ------------------------------------------
 
 const skillManager = new SkillManager(socket, SKILL_ROOT_PATH, COLLECTION_NAME, PERSONALITY, IS_INHERIT);
 const memoryStream = new MemoryStream(socket, MEMORY_ROOT_PATH, COLLECTION_NAME, PERSONALITY, IS_INHERIT);
@@ -92,11 +105,14 @@ socket.onmessage = async function (event) {
                 continue;
             }
 
-            if (status.hp !== undefined && status.hp <= 0) {
-                console.log("L'eroe è morto! Spegnimento del server Java per salvare il report di JaCoCo...");
+            // Sostituisci il controllo esistente con questo per coprire entrambe le proprietà di salute
+            const currentHp = status.hp !== undefined ? status.hp : status.health;
+
+            if (currentHp !== undefined && currentHp <= 0) {
+                console.log("L'eroe è morto! Invio QUIT_GAME al server Java...");
                 sendMessage(socket, "QUIT_GAME");
-                await sleep(2000); // Dà il tempo al socket di inviare il messaggio
-                process.exit(0);   // Chiude lo script Node.js
+                await sleep(3000); // 3 secondi pieni per garantire la ricezione del pacchetto
+                process.exit(0);
             }
 
             // Logica di aggiornamento delle caselle visitate

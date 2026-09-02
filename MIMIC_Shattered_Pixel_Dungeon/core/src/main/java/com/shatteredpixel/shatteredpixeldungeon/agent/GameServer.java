@@ -53,9 +53,17 @@ public class GameServer extends WebSocketServer {
         // AGGIUNTA PER JACOCO: Chiusura pulita del gioco
         // ---------------------------------------------------------
         if (message.equals("QUIT_GAME")) {
-            System.out.println(BOT_MSG + "Ricevuto comando QUIT_GAME. Chiusura pulita per JaCoCo...");
+            System.out.println(BOT_MSG + "Ricevuto comando QUIT_GAME. Salvataggio forzato JaCoCo tramite Reflection...");
 
-            // Chiude la finestra di LibGDX e permette a JaCoCo di salvare il file .exec
+            try {
+                Class<?> rtClass = Class.forName("org.jacoco.agent.rt.RT");
+                Object agent = rtClass.getMethod("getAgent").invoke(null);
+                agent.getClass().getMethod("dump", boolean.class).invoke(agent, false);
+                System.out.println(BOT_MSG + "Dump JaCoCo eseguito con successo!");
+            } catch (Exception e) {
+                System.err.println(BOT_MSG + "Impossibile eseguire il dump di JaCoCo: " + e.getMessage());
+            }
+
             com.badlogic.gdx.Gdx.app.exit();
             return;
         }

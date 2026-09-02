@@ -19,3 +19,38 @@ dependencies {
     implementation 'org.apache.poi:poi-ooxml:5.2.3'
     implementation 'org.apache.xmlbeans:xmlbeans:5.1.1'
 }
+
+// 1. Applica il plugin ufficiale per generare i report
+apply plugin: 'jacoco'
+
+jacoco {
+    toolVersion = "0.8.8"
+}
+
+
+// 2. Crea un task personalizzato per unire il file .exec alle classi del core
+task generateCoreReport(type: JacocoReport) {
+
+    // Trova i file .exec generati dalle esecuzioni
+    executionData fileTree(project.rootDir.absolutePath).include("**/*.exec")
+
+    // Punta alle cartelle sorgente
+    sourceDirectories.setFrom(files("src/main/java"))
+
+    // Filtra le classi compilate escludendo UI, finestre, scene e servizi web
+    classDirectories.setFrom(fileTree(
+            dir: 'build/classes/java/main',
+            excludes: [
+                    '**/windows/**',
+                    '**/ui/**',
+                    '**/scenes/**',
+                    '**/services/**'
+            ]
+    ))
+
+    reports {
+        xml.required = true
+        html.required = true
+        // Il report verrà salvato in: core/build/reports/jacoco/generateCoreReport/
+    }
+}

@@ -137,9 +137,20 @@ dependencies {
     implementation project(':services:news:shatteredNews')
 }
 
-// COLLEGHIAMO JACOCO AL TASK DI GIOCO STANDARD ('run')
+// CONFIGURAZIONE JACOCO AGGIORNATA A 0.8.10 PER JAVA 17+
 jacoco {
-    applyTo(tasks.named('run').get())
+    toolVersion = "0.8.10"
+}
+
+tasks.named('run') {
+    doFirst {
+        // Chiediamo a Gradle di risolvere il classifier 'runtime' di JaCoCo 0.8.10
+        File jacocoAgentJar = configurations.detachedConfiguration(
+                dependencies.create("org.jacoco:org.jacoco.agent:0.8.10:runtime")
+        ).singleFile
+
+        jvmArgs += "-javaagent:${jacocoAgentJar.absolutePath}=destfile=${layout.buildDirectory.file('jacoco/run.exec').get().asFile.absolutePath},dumponexit=true,output=file"
+    }
 }
 
 // PUNTIAMO AL FILE CORRETTO GENERATO DAL TASK 'run'
@@ -155,7 +166,7 @@ jacocoTestReport {
 
     sourceDirectories.setFrom(files("src/main/java"))
 
-    // JaCoCo salverà i dati qui quando chiudi il gioco avviato con desktop:run
+    // Legge il file .exec generato dalla sessione del bot
     executionData.setFrom(layout.buildDirectory.file("jacoco/run.exec"))
 }
 
