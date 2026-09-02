@@ -23,7 +23,7 @@ const BOT_LOG_MSG = "bridge.agentClient:log";
 
 // Configurazione
 const PERSONALITY = config.MIMIC_PERSONALITY;
-const COLLECTION_NAME = "Run8";
+const COLLECTION_NAME = "Run1efficiency";
 const IS_INHERIT = config.IS_CONTINUE;
 const TIMEOUT = 10 * 60000;
 const DURATION = 60000 * 60 * 24;
@@ -53,8 +53,7 @@ const socket = new WebSocket(`ws://localhost:${config.PORT}`);
 const skillManager = new SkillManager(socket, SKILL_ROOT_PATH, COLLECTION_NAME, PERSONALITY, IS_INHERIT);
 const memoryStream = new MemoryStream(socket, MEMORY_ROOT_PATH, COLLECTION_NAME, PERSONALITY, IS_INHERIT);
 
-// NUOVO BLOCCO: Inizializzazione del calcolatore di metriche
-// Inseriamo 11300000 come combinazioni stimate per SPD dal paper e 2000 come limite arbitrario di caselle di un livello
+// Inizializzazione del calcolatore di metriche
 const metrics = new EvaluationMetrics(11300000, 2000);
 
 let startTime;
@@ -88,9 +87,19 @@ socket.onmessage = async function (event) {
         while (socket.readyState === WebSocket.OPEN && Date.now() - startTime < DURATION) {
 
             const status = await getStatus(socket);
-            if (!status) continue;
+            if (!status) {
+                await sleep(1000); // Previeni il fast loop
+                continue;
+            }
 
-            //  Logica di aggiornamento delle caselle visitate
+            if (status.hp !== undefined && status.hp <= 0) {
+                console.log("L'eroe è morto! Spegnimento del server Java per salvare il report di JaCoCo...");
+                sendMessage(socket, "QUIT_GAME");
+                await sleep(2000); // Dà il tempo al socket di inviare il messaggio
+                process.exit(0);   // Chiude lo script Node.js
+            }
+
+            // Logica di aggiornamento delle caselle visitate
             if (status["hero position in xy"] && status.depth !== undefined) {
                 // Se cambiamo livello del dungeon, svuotiamo la memoria spaziale
                 if (status.depth !== currentDepth) {
@@ -99,17 +108,16 @@ socket.onmessage = async function (event) {
                     console.log(`${BOT_LOG_MSG} Nuovo livello raggiunto: Profondità ${currentDepth}. Memoria spaziale resettata.`);
                 }
 
-                // Aggiungiamo la coordinata attuale formattata (es: "[16, 33]")
+                // Aggiungiamo la coordinata attuale formattata
                 const posStr = `[${status["hero position in xy"].join(", ")}]`;
                 visitedTiles.add(posStr);
 
-                // NUOVA RIGA: Registriamo la coordinata visitata nel calcolatore delle metriche
+                // Registriamo la coordinata visitata nel calcolatore delle metriche
                 metrics.recordLocation(posStr);
 
                 // Iniettiamo le ultime 15 posizioni direttamente nello status
                 status.visitedTilesList = Array.from(visitedTiles).slice(-15);
             }
-            // ----------------------------------------------------------------
 
             let result = null;
 
@@ -130,34 +138,17 @@ socket.onmessage = async function (event) {
             if (result && result.memoryUpdate && result.nextAction) {
                 currentTurn++;
 
-                // Registriamo l'azione pianificata per le metriche combinatorie e l'entropia
+                // Registriamo l'azione pianificata per le metriche
                 metrics.recordInteraction(
                     result.nextAction.action || "wait",
-                    String(result.nextAction.tile || "null"), // Converte eventuali array in stringhe per usarle come 'subjectItem'
+                    String(result.nextAction.tile || "null"),
                     result.nextAction.item1 || "null",
-                    false, // isCarryingItem: lasciato a false, da personalizzare se il bot usa l'inventario
-                    false  // hasUpgrade: lasciato a false
+                    false,
+                    false
                 );
 
-                const statusString = status2Prompt(status);
-
-                await memoryStream.addMemory(
-                    "event",
-                    result.memoryUpdate.success,
-                    Date.now(), 0, Date.now(),
-                    result.nextAction.task,
-                    result.nextAction.action || "",
-                    result.nextAction.tile || [],
-                    result.nextAction.item1 || "",
-                    result.nextAction.item2 || "",
-                    /** @type {any} */ (statusString),
-                    result.nextAction.reasoning || "",
-                    "",
-                    result.memoryUpdate.subjective_analysis || "",
-                    "", "",
-                    result.memoryUpdate.critique || "",
-                    ""
-                );
+                // IL SALVATAGGIO DOPPIO DELLA MEMORIA È STATO RIMOSSO DA QUI
+                // Il salvataggio reale ora avviene esclusivamente in bottomUp e topDown per garantire l'allineamento causale.
 
                 recentTurnsBuffer.push({
                     turn: currentTurn,
@@ -177,8 +168,8 @@ socket.onmessage = async function (event) {
                     recentTurnsBuffer = [];
                 }
             }
-            // --- RALLENTIAMO IL BOT ---
-            // Aspetta 1 secondo tra un turno e l'altro per evitare il ban delle API (Errore 429)
+
+            // Aspetta 1 secondo tra un turno e l'altro per evitare il ban delle API
             await sleep(1000);
         }
     }

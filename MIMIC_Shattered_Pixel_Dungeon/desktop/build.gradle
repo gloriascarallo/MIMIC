@@ -137,15 +137,13 @@ dependencies {
     implementation project(':services:news:shatteredNews')
 }
 
-// COLLEGHIAMO JACOCO AL TASK DI GIOCO
+// COLLEGHIAMO JACOCO AL TASK DI GIOCO STANDARD ('run')
 jacoco {
-    applyTo(tasks.named('debug').get())
+    applyTo(tasks.named('run').get())
 }
 
-//  PUNTIAMO AL FILE CORRETTO
+// PUNTIAMO AL FILE CORRETTO GENERATO DAL TASK 'run'
 jacocoTestReport {
-    dependsOn debug
-
     reports {
         xml.required.set(true)
         html.required.set(true)
@@ -157,8 +155,8 @@ jacocoTestReport {
 
     sourceDirectories.setFrom(files("src/main/java"))
 
-    // Diciamo a JaCoCo dove andrà a salvare i dati del gioco
-    executionData.setFrom(layout.buildDirectory.file("jacoco/debug.exec"))
+    // JaCoCo salverà i dati qui quando chiudi il gioco avviato con desktop:run
+    executionData.setFrom(layout.buildDirectory.file("jacoco/run.exec"))
 }
 
 jacocoTestCoverageVerification {

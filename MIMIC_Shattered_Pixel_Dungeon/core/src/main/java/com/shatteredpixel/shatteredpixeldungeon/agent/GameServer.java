@@ -49,7 +49,19 @@ public class GameServer extends WebSocketServer {
     public void onMessage(WebSocket conn, String message) {
         GLog.c(BOT_MSG + message);
 
-        if (message.equals("GetStatus")) {
+        // ---------------------------------------------------------
+        // AGGIUNTA PER JACOCO: Chiusura pulita del gioco
+        // ---------------------------------------------------------
+        if (message.equals("QUIT_GAME")) {
+            System.out.println(BOT_MSG + "Ricevuto comando QUIT_GAME. Chiusura pulita per JaCoCo...");
+
+            // Chiude la finestra di LibGDX e permette a JaCoCo di salvare il file .exec
+            com.badlogic.gdx.Gdx.app.exit();
+            return;
+        }
+        // ---------------------------------------------------------
+
+        else if (message.equals("GetStatus")) {
             JSONObject status = Status.getStatus();
             status.put("msgType", "status");
             conn.send(status.toString());
@@ -65,7 +77,7 @@ public class GameServer extends WebSocketServer {
             int[] tile = null;
 
             if (newPlan.get("action").toString().equals("act") ||
-                newPlan.get("action").toString().equals("throw")) {
+                    newPlan.get("action").toString().equals("throw")) {
                 JSONArray jsonArray = (JSONArray) newPlan.get("tile");
 
                 tile = new int[jsonArray.length()];
@@ -94,11 +106,8 @@ public class GameServer extends WebSocketServer {
 
             // Send the logs, errors and status to the client
             JSONObject termination = new JSONObject();
-
             termination.put("msgType", "TERMINATED");
-
             conn.send(termination.toString());
-
             conn.close();
 
             try {
