@@ -18,7 +18,7 @@ async function DEPRECATED_expect(socket, task) {
 
     let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/DEPRECATED_expect_prompt.txt", 'utf8');
 
-    let expectation = await callOpenAI(socket, context, "Task: " + task, BOT_LOG_MSG, "gpt-4o", false, true);
+    let expectation = await callOpenAI(socket, context, "Task: " + task, BOT_LOG_MSG, "local-model", false, true);
 
     if (!expectation) {
         console.log(BOT_LOG_MSG, "OpenAI response was empty. Ignore.");

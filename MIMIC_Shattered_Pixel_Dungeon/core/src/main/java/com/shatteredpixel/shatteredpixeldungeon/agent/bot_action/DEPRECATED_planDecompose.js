@@ -32,7 +32,7 @@ async function DEPRECATED_planDecompose(socket, status, plan) {
 
     const input = infoToInput(status, plan);
 
-    let subGoals = await callOpenAI(socket, context, input, BOT_LOG_MSG, "gpt-4o", false, true);
+    let subGoals = await callOpenAI(socket, context, input, BOT_LOG_MSG, "local-model", false, true);
 
     if (!subGoals) {
         console.log(BOT_LOG_MSG, "OpenAI response was empty. Ignore.");

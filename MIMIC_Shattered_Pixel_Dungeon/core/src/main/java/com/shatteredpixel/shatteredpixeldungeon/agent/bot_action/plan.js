@@ -122,7 +122,7 @@ async function plan(socket, memoryStream, status, personality, latestBadPlans, l
 
     currStatus += "\n\nCRITICAL SURVIVAL RULE: You ARE the 'guerriero' (the hero). Do NOT attack 'guerriero' and do NOT target the tile you are currently standing on.\n";
 
-    let newPlan = await callOpenAI(socket, context, currStatus, BOT_LOG_MSG, "gpt-4o", false, true);
+    let newPlan = await callOpenAI(socket, context, currStatus, BOT_LOG_MSG, "local-model", false, true);
 
     if (!newPlan) {
         sendMessage(socket, `${BOT_LOG_MSG} OpenAI response was empty. Ignore.`);

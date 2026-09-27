@@ -1,9 +1,14 @@
-// [AGGIORNATO - MIMIC 2.0 Resilience Edition]
+// [AGGIORNATO - MIMIC 2.0 Resilience Edition + Metrics Tracking]
 // Gestione strategica ottimizzata, memoria causale allineata e protezione Rate Limit.
 
 const { plan } = require("../bot_action/plan");
 const { getStatus, actAndFeedback } = require("./client");
 const { sendMessage } = require("./sendMessage");
+
+// --- INIEZIONE PER LE METRICHE DELLA TESI ---
+const { performance } = require('perf_hooks');
+const { logTurn } = require('./metricsLogger'); // Assicurati che il percorso sia corretto
+// --------------------------------------------
 
 const BOT_LOG_MSG = "bridge.topDownActions:log";
 const BOT_ERR_MSG ="bridge.topDownActions:error";
@@ -39,6 +44,9 @@ async function topDownActions(socket, skillManager, memoryStream,
 
     sendMessage(socket, `${BOT_LOG_MSG} Status acquisito (Environment gestito dal client).`);
 
+    // --- AVVIO CRONOMETRO LATENZA ---
+    const startTime = performance.now();
+
     // 2. IL MEGA-PROMPT (Generazione Azione Strategica)
     const megaPlan = await plan(
         socket, memoryStream, previousStatus, PERSONALITY,
@@ -47,12 +55,20 @@ async function topDownActions(socket, skillManager, memoryStream,
         RETRIEVE_IS_BOTH, "topDown"
     );
 
+    // --- STOP CRONOMETRO LATENZA ---
+    const endTime = performance.now();
+
     if (!megaPlan || !megaPlan.nextAction) {
         const waitTime = 40000;
         sendMessage(socket, `${BOT_ERR_MSG} Top-Down Plan fallito o API occupata. Pausa di ${waitTime/1000}s...`);
         await sleep(waitTime);
         return null;
     }
+
+    // --- SALVATAGGIO METRICHE NEL CSV ---
+    const turnLatency = (endTime - startTime) / 1000; // Converte in secondi
+    logTurn(turnLatency, "TopDown");
+    // ------------------------------------
 
     const myPlan = megaPlan.nextAction;
     const memoryUpdate = megaPlan.memoryUpdate;
@@ -120,7 +136,7 @@ async function topDownActions(socket, skillManager, memoryStream,
     sendMessage(socket, `${BOT_LOG_MSG} Turno completato. Attesa: ${finalSleep/1000}s`);
     await sleep(finalSleep);
 
-    return megaPlan; // Rimosse le parentesi quadre per non rompere il check di agentClient
+    return megaPlan;
 }
 
 module.exports = {

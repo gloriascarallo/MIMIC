@@ -22,7 +22,7 @@ async function preferenceAnalyze(socket, memoryRootPath, persona, memory, memory
     let context = fs.readFileSync("./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/preference_analyze_prompt.txt", 'utf8');
     context = context.replace("{Personalities}", persaContext);
 
-    let analysis = await callOpenAI(socket, context, memory, BOT_LOG_MSG, "gpt-4o", false, true, true, false);
+    let analysis = await callOpenAI(socket, context, memory, BOT_LOG_MSG, "local-model", false, true, true, false);
 
     // let analysis = "TEST";
 

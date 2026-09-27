@@ -80,7 +80,7 @@ async function DEPRECATED_codeGeneration(memoryStream, skillManager, BASIC_SKILL
     let currStatus = statusToCodeInput(status, inventory, task, previousCode, errMsg, chatLog, critique)
 
     // FIXME: Bad Request sometimes because of large context
-    let result = await callOpenAI(socket, context, currStatus, BOT_LOG_MSG, "gpt-4o", true, true);
+    let result = await callOpenAI(socket, context, currStatus, BOT_LOG_MSG, "local-model", true, true);
 
     if (!result) {
         console.log(BOT_LOG_MSG, "OpenAI response was empty. Ignore.");

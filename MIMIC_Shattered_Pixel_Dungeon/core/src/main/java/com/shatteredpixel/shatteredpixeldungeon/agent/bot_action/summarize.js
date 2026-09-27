@@ -18,10 +18,10 @@ async function performPeriodicReflection(socket, recentMemories, currentPersonal
     Il tuo compito è analizzare le prestazioni di un agente con personalità: ${currentPersonality}.
     Analizza i turni forniti e identifica se i fallimenti sono dovuti a limiti intrinseci della personalità o a errori tattici ricorrenti.
     Genera ESATTAMENTE 3 lezioni brevi, numerate e attuabili per migliorare la sopravvivenza nei prossimi turni.
-    Le tue lezioni verranno inserite direttamente nel Planner per guidare le decisioni future[cite: 127, 160].`;
+    Le tue lezioni verranno inserite direttamente nel Planner per guidare le decisioni future.`;
 
     // 2. Trasformazione delle memorie recenti in stringa per l'LLM [cite: 175, 182]
-    // Includiamo l'analisi soggettiva e la critica per permettere una riflessione profonda[cite: 155, 180].
+    // Includiamo l'analisi soggettiva e la critica per permettere una riflessione profonda.
     const memoryHistory = recentMemories.map(m =>
         `Turno ${m.turn}: ${m.success ? "SUCCESSO" : "FALLIMENTO"} 
          Task: ${m.task}
@@ -31,7 +31,7 @@ async function performPeriodicReflection(socket, recentMemories, currentPersonal
 
     // 3. Chiamata all'LLM per la sintesi strategica
     // MIMIC accumula conoscenza nel tempo per risolvere compiti complessi[cite: 47, 603].
-    const reflection = await callOpenAI(socket, context, memoryHistory, "bot_reflector:log", "gpt-4o", false, true);
+    const reflection = await callOpenAI(socket, context, memoryHistory, "bot_reflector:log", "local-model", false, true);
 
     if (reflection) {
         const path = "./core/src/main/java/com/shatteredpixel/shatteredpixeldungeon/agent/context/lessons_learned.txt";

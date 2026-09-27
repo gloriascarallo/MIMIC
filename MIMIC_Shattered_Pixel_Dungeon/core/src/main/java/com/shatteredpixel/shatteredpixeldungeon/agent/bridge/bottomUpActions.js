@@ -1,9 +1,14 @@
-// [AGGIORNATO - MIMIC 2.0 Resilience Edition]
+// [AGGIORNATO - MIMIC 2.0 Resilience Edition + Metrics Tracking]
 // Gestione ottimizzata dell'environment, memoria causale allineata e protezione Rate Limit.
 
 const { plan } = require("../bot_action/plan");
 const { getStatus, actAndFeedback } = require("./client");
 const { sendMessage } = require("./sendMessage");
+
+// --- INIEZIONE PER LE METRICHE DELLA TESI ---
+const { performance } = require('perf_hooks');
+const { logTurn } = require('./metricsLogger'); // Assicurati che il percorso sia corretto rispetto a dove hai salvato metricsLogger.js
+// --------------------------------------------
 
 const BOT_LOG_MSG = "bridge.bottomUpActions:log";
 const BOT_ERR_MSG = "bridge.bottomUpActions:error";
@@ -39,6 +44,9 @@ async function bottomUpActions(socket, skillManager, memoryStream,
 
     sendMessage(socket, `${BOT_LOG_MSG} Stato acquisito (Environment gestito dal client).`);
 
+    // --- AVVIO CRONOMETRO LATENZA ---
+    const startTime = performance.now();
+
     // 2. CHIAMATA AL MEGA-PROMPT (Architettura Single-Shot)
     const megaPlan = await plan(
         socket, memoryStream, currentStatus, PERSONALITY,
@@ -47,6 +55,9 @@ async function bottomUpActions(socket, skillManager, memoryStream,
         RETRIEVE_IS_BOTH, "bottomUp"
     );
 
+    // --- STOP CRONOMETRO LATENZA ---
+    const endTime = performance.now();
+
     // Se l'API restituisce un errore (Quota Exceeded 429 o Service Unavailable 503)
     if (!megaPlan || !megaPlan.nextAction) {
         const cooldown = 40000;
@@ -54,6 +65,11 @@ async function bottomUpActions(socket, skillManager, memoryStream,
         await sleep(cooldown);
         return null;
     }
+
+    // --- SALVATAGGIO METRICHE NEL CSV ---
+    const turnLatency = (endTime - startTime) / 1000; // Converte in secondi
+    logTurn(turnLatency, "BottomUp");
+    // ------------------------------------
 
     const nextAction = megaPlan.nextAction;
     const memoryUpdate = megaPlan.memoryUpdate;
@@ -71,10 +87,10 @@ async function bottomUpActions(socket, skillManager, memoryStream,
             0,
             Date.now(),
             lastTaskDone,
-            lastActionDone, // Azione che ha causato il risultato
-            lastTileDone,   // Tile puntato nel turno precedente
-            lastItem1Done,  // Item 1 del turno precedente
-            lastItem2Done,  // Item 2 del turno precedente
+            lastActionDone,
+            lastTileDone,
+            lastItem1Done,
+            lastItem2Done,
             JSON.stringify(lastStatusRcvd),
             memoryUpdate.reasoning,
             "", "", "", "",
